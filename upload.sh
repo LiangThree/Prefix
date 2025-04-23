@@ -9,5 +9,5 @@ echo ".gitignore" >> .gitignore
 
 git add .
 git commit -m "upload folder, skip files over 50MB"
-git remote add origin https://github.com/LiangThree/MyProject.git
+git remote add origin https://github.com/LiangThree/Prefix.git
 git push -u origin master
