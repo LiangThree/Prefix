@@ -51,6 +51,7 @@ elif [ "$condition" == "answer" ]; then
     --data_num 300 
 
 elif [ "$condition" == "lora_train" ]; then
+    
     python RED/Llama/lora_train.py \
     --model_path "Meta-Llama-3-8B-Instruct" \
     --data_path  "ReFT/dataset/math_10k/train.json" \
@@ -60,6 +61,7 @@ elif [ "$condition" == "lora_train" ]; then
     --layer 15
 
 elif [ "$condition" == "lora_eval" ]; then
+    
     python RED/Llama/lora_eval.py \
     --model_path "Meta-Llama-3-8B-Instruct" \
     --run_type "lora" \

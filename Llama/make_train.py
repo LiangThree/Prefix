@@ -17,7 +17,7 @@ from math import cos, pi
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 parallel_size = 4
-max_length =  2048
+max_length =  4096
 
 from vllm import LLM, SamplingParams
 
@@ -146,6 +146,8 @@ def first_round(model_path:str, data_num:int, output_path:str, template:str, dat
             question = dataset[i]['Question']
             prompt = template % question
             prompts.append(prompt)
+
+        print(f'current temperature {0}')
         
         sampling_params = SamplingParams(
             temperature=0.0,
@@ -217,6 +219,8 @@ def the_next_round(model_path:str, data_num:int, output_path:str, template:str, 
                 prompts.append(prompt)
         
         temperature = dynamic_temperature_scheduler(n_round, 8)
+        print(f'current temperature {temperature}')
+
         sampling_params = SamplingParams(
             temperature=temperature,
             max_tokens=4096,
