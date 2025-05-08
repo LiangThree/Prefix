@@ -8,8 +8,15 @@ import json
 import pdb
 from datasets import load_dataset, Dataset
 from typing import Optional, Union
+from transformers.trainer_callback import TrainerCallback
+
+import sys
+cur_path = os.path.dirname(os.path.abspath(__file__))
+main_dir = "/".join(cur_path.split("/")[:-1])
+sys.path.append(main_dir)
+
 from template import *
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4"
+
 device = "cuda"
 
 def get_data(data_files:str, data_num:int, split:Optional[Union[str, float]] = None):
@@ -30,10 +37,6 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
         path = "/mnt/publiccache/huggingface/"
     model_path = path + model_path
 
-    path = "/mnt/userdata/MyProject/" 
-    if not os.path.exists(path):
-        path = "/mnt/userdata/liangsirui/MyProject/"
-    data_path = path + data_path
 
     print("template_index:", template_index)
 
@@ -62,13 +65,13 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
 
     # 将数据转换为 Hugging Face 的 Dataset 格式
     train_dataset = Dataset.from_dict({
-        "input": [prompt % example['instruction'] for example in train_data],
-        "output": [example['output'] for example in train_data]
+        "input": [prompt % example['Question'] for example in train_data],
+        "output": [example['Output'] for example in train_data]
     })
 
     valid_dataset = Dataset.from_dict({
-        "input": [prompt % example['instruction'] for example in eval_data],
-        "output": [example['output'] for example in eval_data]
+        "input": [prompt % example['Question'] for example in eval_data],
+        "output": [example['Output'] for example in eval_data]
     })
 
     def tokenize_function(example):
@@ -78,15 +81,31 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
     tokenized_valid_dataset = valid_dataset.map(tokenize_function, batched=True)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
+    if "math10k" in data_path:
+        data_type = 'math10k'
+    elif "prm800k" in data_path:
+        data_type = 'prm800k'
+    output_dir = os.path.join(output_dir, f"{data_num}_{data_type}_lora_{learning_rate}")
+
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    
+    class LogSaverCallback(TrainerCallback):
+        def on_log(self, args, state, control, logs=True, **kwargs):
+            if logs:
+                with open(output_dir+"/train.log", "a") as f:
+                    f.write(f"Step {state.global_step}: {logs}\n")
+
     training_args = TrainingArguments(
         output_dir="./lora_output",
         overwrite_output_dir=True,
-        fp16=True, #converts to float precision 16 using bitsandbytes
-        per_device_train_batch_size=1,
-        per_device_eval_batch_size=1,
-        learning_rate=2e-5,
+        fp16=True,
+        per_device_train_batch_size=4,
+        per_device_eval_batch_size=4,
+        learning_rate=learning_rate,
         num_train_epochs=3,
         logging_strategy="steps",
+        logging_steps=10,
         evaluation_strategy="epoch",
         save_strategy="epoch",
         report_to="none"
@@ -99,12 +118,10 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
         train_dataset=tokenized_train_dataset,
         eval_dataset=tokenized_valid_dataset,
         data_collator=data_collator,
+        callbacks=[LogSaverCallback()],
     )
     trainer.train()
 
-    # 保存微调后的模型
-    output_dir = os.path.join(output_dir, f"{data_num}_lora_{learning_rate}", f"template{template_index}")
-    
     model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
     print(f'model saved in {output_dir}')
@@ -121,7 +138,6 @@ def main():
     args = parser.parse_args()
 
     train_model(**vars(args))
-
     # model.base_model.model.model.layers[15].self_attn.o_proj.lora_A.default.weight
 
 

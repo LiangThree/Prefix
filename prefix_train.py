@@ -4,7 +4,7 @@ from datasets import load_dataset, Dataset
 from typing import Optional, Union
 
 import pdb
-from Llama.template import *
+from template import *
 import json
 import torch.optim as optim
 
@@ -21,18 +21,18 @@ from transformers.trainer_callback import TrainerCallback
 import os
 import torch
 from transformers import AutoModelForCausalLM
-from model import ActivationLLama
+from model import ActivationLLama, ActivationQwen
 from transformers import DataCollatorForLanguageModeling
 from sklearn.model_selection import train_test_split
 from transformers.trainer_callback import TrainerCallback
 import torch
 
-MAX_INPUT_LENGTH = 512
-MAX_LENGTH = 512
+MAX_INPUT_LENGTH = 1024
+MAX_LENGTH = 1024
 
 device_map = "auto"
 
-def load_RED_model(model_path, op_position, layer_type):
+def load_RED_model(model_path, op_position, layer_type, n_prefix):
 
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
@@ -41,7 +41,11 @@ def load_RED_model(model_path, op_position, layer_type):
         use_auth_token=True,
         torch_dtype=torch.bfloat16,
     )
-    model = ActivationLLama(model, op_position=op_position, layer_type=layer_type)
+    
+    if "llama" in model_path.lower():
+        model = ActivationLLama(model, op_position=op_position, layer_type=layer_type, prefix=-1)
+    elif "qwen" in model_path.lower():
+        model = ActivationQwen(model, op_position=op_position, layer_type=layer_type, prefix=-1)
     return model
 
 
@@ -56,6 +60,7 @@ class CustomModelSavingCallback(TrainerCallback):
             os.remove(os.path.join(checkpoint_path, "pytorch_model.bin"))
         if  "model.safetensors" in os.listdir(checkpoint_path):
             os.remove(os.path.join(checkpoint_path, "model.safetensors"))
+
 
 class CustomDataCollator(DataCollatorForLanguageModeling):
     def __call__(self, features):
@@ -77,7 +82,7 @@ class ActivationScalingMonitor(TrainerCallback):
         current_scaling = 0
         current_bias = 0
 
-        for layer in range(32):
+        for layer in range(len(self.model.base_model.model.layers)):
             if self.model.op_position == "attn_q":
                 module = self.model.base_model.model.layers[layer].self_attn.q_proj
             elif self.model.op_position == "attn_k":
@@ -113,11 +118,9 @@ def load_custom_dataset(
 
     file_path = json_path
 
-    # 加载原始数据集
     dataset = load_dataset('json', data_files=file_path, split='train')
     dataset = dataset.select(range(data_num))
 
-    # 处理数据集划分
     if isinstance(split, float) and 0 < split < 1:
         dataset = dataset.train_test_split(test_size=1-split, shuffle=True)
         return dataset
@@ -125,7 +128,6 @@ def load_custom_dataset(
         return dataset
     else:
         raise ValueError("split参数应为float(0-1)或None")
-
         
 def save_params_to_json(output_path: str, **kwargs):
     with open(output_path, "w", encoding="utf-8") as f:
@@ -155,12 +157,15 @@ def train(
         data_path: str = "",
         output_dir: str = "",
         data_num: int = None,
+        n_prefix: int = None,
         op_position: str = "",
-        learning_rate: float = 2e-5,
+        learning_rate: str = 2e-5,
         num_train_epochs:  int = 3,
         template_index: int = None,
         layer_type: str=""
 ):
+    str_lr = str(learning_rate)
+    learning_rate = float(learning_rate)
 
     print("----------------------- template -----------------------")
     print(prompt_template[template_index])
@@ -174,9 +179,15 @@ def train(
     if not os.path.exists(model_path):
         model_path = model_path.replace('usercache', 'publiccache')
 
-    output_dir = os.path.join(output_dir, f'{data_num}_{op_position}_{layer_type}_{learning_rate}')
+    if 'math10k' in data_path:
+        data_type = 'math10k'
+    elif 'prm800k' in data_path:
+        data_type = 'prm800k'
 
-    model = load_RED_model(model_path=model_path, op_position=op_position, layer_type=layer_type)
+    output_dir = os.path.join(output_dir, f'{data_num}_{data_type}_{layer_type}_{n_prefix}_{str_lr}')
+
+    model = load_RED_model(model_path=model_path, op_position=op_position, layer_type=layer_type, n_prefix=n_prefix)
+    
     train_config = {
         "model_path": model_path,
         "data_path": data_path,
@@ -200,9 +211,8 @@ def train(
     tokenizer.padding_side = "right"
 
     def process_ultra_preference(example, task_type, k=10):
-        question = example["instruction"]
-        output = example["output"]
-        answer = example["answer"]
+        question = example["Question"]
+        output = example["Output"]
 
         template = prompt_template[template_index] % question
         output = f"{output}\n\n "
@@ -210,8 +220,6 @@ def train(
         example["prompt"] = template
         example["output"] = output
         example["text"] = example["prompt"] + example["output"]
-        # example["text_length"] = len(tokenizer(example["text"]).input_ids)
-        # example["prompt_length"] = len(tokenizer(example["prompt"]).input_ids)
 
         # 分词处理
         inputs = tokenizer(
@@ -260,13 +268,13 @@ def train(
 
     train_data = load_custom_dataset(data_path, data_num)
 
-    split_dataset = train_data.train_test_split(test_size=0.1, shuffle=True)
+    split_dataset = train_data.train_test_split(test_size=0.9, shuffle=True)
     train_prefix = split_dataset["train"]
     train_full = split_dataset["test"]
     
     # 处理前缀数据集
     train_prefix = train_prefix.map(
-        lambda ex: process_ultra_preference(ex, "prefix"),
+        lambda ex: process_ultra_preference(ex, "prefix", n_prefix),
         num_proc=8
     )
 
@@ -308,7 +316,7 @@ def train(
     training_args = TrainingArguments(
         output_dir=output_dir,
         logging_dir=log_dir,
-        per_device_train_batch_size=8,
+        per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
         learning_rate=learning_rate,
         logging_steps=1,
@@ -331,6 +339,7 @@ def train(
         model=model,
         dataset_text_field="text",
         data_collator=data_collator,
+        max_seq_length=1024,
         train_dataset=combined_data,
         tokenizer=tokenizer,
         args=training_args,

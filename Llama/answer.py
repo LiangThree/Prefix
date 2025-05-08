@@ -2,7 +2,7 @@ import sys
 import os
 
 cur_path = os.path.dirname(os.path.abspath(__file__))
-main_dir = "/".join(cur_path.split("/")[:-2])
+main_dir = "/".join(cur_path.split("/")[:-1])
 sys.path.append(main_dir)
 from template import *
 
@@ -19,7 +19,8 @@ from datasets import load_dataset, Dataset
 from typing import Optional, Union
 import pdb 
 from make_answer_json import make_answer
-# from eval import eval_one_data
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 
 def load_custom_dataset(
@@ -28,25 +29,16 @@ def load_custom_dataset(
     split: Optional[Union[str, float]] = None,
 ) -> Union[Dataset, dict]:
     
-    # 加载 JSON 文件（原始格式是字典）
     with open(json_path, "r", encoding="utf-8") as f:
         data_dict = json.load(f)
 
-    # 将字典转换为列表格式
     data_list = list(data_dict.values())
 
-    # 限制数据条数，避免超界
     if data_num is not None:
         data_list = data_list[:min(data_num, len(data_list))]
 
-    # 转换为 Hugging Face Dataset 格式
     dataset = Dataset.from_list(data_list)
 
-    # # 加载原始数据集
-    # dataset = load_dataset('json', data_files=json_path, split='train')
-    # dataset = dataset.select(range(data_num))
-    
-    # 处理数据集划分
     if isinstance(split, float) and 0 < split < 1:
         dataset = dataset.train_test_split(test_size=1-split, shuffle=True)
         return dataset
@@ -55,12 +47,9 @@ def load_custom_dataset(
     else:
         raise ValueError("split参数应为float(0-1)或None")
 
-import json
 def read_json_file(file_path):
     try:
-        # 以只读模式打开文件，使用 UTF-8 编码
         with open(file_path, 'r', encoding='utf-8') as file:
-            # 加载 JSON 数据
             data = json.load(file)
             return data
     except FileNotFoundError:
@@ -73,7 +62,6 @@ def save_list_to_json(data_list, file_path):
         json.dump(data_list, f, ensure_ascii=False, indent=4)  # 使用 indent 格式化 JSON
     print(f"数据已成功存储到 {file_path}")
 
-
 def save_params_to_json(output_path: str, **kwargs):
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(kwargs, f, indent=4, ensure_ascii=False)
@@ -82,6 +70,7 @@ def main(
         model_path: str = "",
         data_num: int = None,
         peft:bool = False,
+        n_prefix: int = None,
         start: int = -1,
         end: int = -1,
         peft_path:str="",
@@ -98,6 +87,11 @@ def main(
     print(prompt_template[template_index])
     print("--------------------------------------------------------")
 
+    peft_path_list = peft_path.split('/')
+    config_path = peft_path_list[3]
+    prefix = n_prefix
+    print('prefix:', prefix)
+
     path = "/mnt/usercache/huggingface/"
     if not os.path.exists(path):
         path = "/mnt/publiccache/huggingface/"
@@ -112,16 +106,7 @@ def main(
     if os.path.exists(peft_path):
         print(f'{peft_path} exists')
 
-    if "attn_o" in peft_path:
-        op_position = "attn_o"
-    elif "attn_q" in peft_path:
-        op_position = "attn_q"
-    elif "attn_k" in peft_path:
-        op_position = "attn_k"
-    elif "attn_v" in peft_path:
-        op_position = "attn_v"
-    elif "ffn" in peft_path:
-        op_position = "ffn"
+    op_position = "attn_o"
 
     eval_config = {
         "model_path": model_path,
@@ -145,13 +130,12 @@ def main(
         prompt = prompt_template[template_index] % question
         example["prompt"] = prompt
         return example
-
-
+    
     if peft == "lora":
         model = AutoPeftModelForCausalLM.from_pretrained(model_path,torch_dtype=torch.bfloat16,device_map="auto")
     elif peft == "RED":
         model = AutoModelForCausalLM.from_pretrained(model_path,torch_dtype=torch.bfloat16,device_map="auto")
-        model = ActivationLLama(model, op_position=op_position)
+        model = ActivationLLama(model, op_position=op_position, prefix=prefix)
         model.load_model(peft_path)
     elif peft == "ft":
         model = AutoModelForCausalLM.from_pretrained(model_path,torch_dtype=torch.bfloat16,device_map="auto")
@@ -184,31 +168,62 @@ def main(
     
     answer_dict = read_json_file(data_path)
 
+    # A100 * 1: batch_size=128
+    batch_size = 128
+    all_prompts = [ex["prompt"] for ex in dataset]
+    total_samples = len(all_prompts)
 
-    for i in tqdm(range(len(dataset))):
-
-        if i < start and start != -1:
-            continue
-        if i > end and end != -1:
-            break
+    for batch_idx in tqdm(range(0, total_samples, batch_size)):
+        batch_prompts = all_prompts[batch_idx:batch_idx + batch_size]
         
-        generate_dict = {}
-        prompt = dataset[i]["prompt"]
-        prompt_ids = tokenizer(prompt, return_tensors='pt').to(model.base_model.device).input_ids
-        output_good = model.generate(input_ids=prompt_ids, max_new_tokens=300, generation_config=generation_config)
+        inputs = tokenizer(
+            batch_prompts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=512,
+        ).to("cuda")
+        
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=512,
+            generation_config=generation_config
+        )
+        
+        completions = tokenizer.batch_decode(
+            outputs, 
+            skip_special_tokens=True
+        )
+        
+        for i, (prompt, completion) in enumerate(zip(batch_prompts, completions)):
+            global_idx = batch_idx + i
+            answer_dict[str(global_idx)][op_position] = completion
 
-        completion_good = tokenizer.decode(output_good[0], skip_special_tokens=True)
-        print("------------------------ Question ----------------------------")
-        print('Question:', dataset[i]['Question'])
-        print('Output:', dataset[i]['Output'])
-        print('Answer:', dataset[i]['Answer'])
+    
+    # for i in tqdm(range(len(dataset))):
+
+    #     if i < start and start != -1:
+    #         continue
+    #     if i > end and end != -1:
+    #         break
+        
+    #     generate_dict = {}
+    #     prompt = dataset[i]["prompt"]
+    #     prompt_ids = tokenizer(prompt, return_tensors='pt').to(model.base_model.device).input_ids
+    #     output_good = model.generate(input_ids=prompt_ids, max_new_tokens=512, generation_config=generation_config)
+
+    #     completion_good = tokenizer.decode(output_good[0], skip_special_tokens=True)
+    #     print("------------------------ Question ----------------------------")
+    #     print('Question:', dataset[i]['Question'])
+    #     print('Output:', dataset[i]['Output'])
+    #     print('Answer:', dataset[i]['Answer'])
         
 
-        print("------------------------ Answer ----------------------------")
-        print(completion_good.replace(prompt, ""))
+    #     print("------------------------ Answer ----------------------------")
+    #     print(completion_good.replace(prompt, ""))
         
-        answer_dict[str(i)][op_position] = completion_good
-        print("------------------------ END ----------------------------\n\n")
+    #     answer_dict[str(i)][op_position] = completion_good
+    #     print("------------------------ END ----------------------------\n\n")
 
 
     save_list_to_json(answer_dict, data_path)

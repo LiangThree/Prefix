@@ -15,9 +15,10 @@ from make_answer_json import save_json_to_file
 from make_answer_json import make_answer
 from math import cos, pi
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
-parallel_size = 4
-max_length =  4096
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+parallel_size = 1
+max_length = 2048
+temperature_list = [0, 0.2, 0.4, 0.6, 0.7, 0.8, 0.8, 0.8, 0.8, 0.8]
 
 from vllm import LLM, SamplingParams
 
@@ -68,23 +69,26 @@ def save_list_to_json(data_list, file_path):
     print(f"数据已成功存储到 {file_path}")
 
 def eval_one_data(model_answer: str, answer: str):
-    try:
-        int_answer = float(answer)
+    
+    if answer in model_answer:
+        return True
+    else:
+        
+        try:
+            int_answer = float(answer)
 
-        if int_answer.is_integer():
-            int_answer = str(int(int_answer))
-            formatted_answer = f"{int_answer:,}" if abs(int_answer) >= 1000 else str(int_answer)
-        
-        if answer in model_answer or int_answer in model_answer or formatted_answer in model_answer:
-            return True
-        else:
+            if int_answer.is_integer():
+                int_answer = int(int_answer)
+                formatted_answer = f"{int_answer:,}" if abs(int_answer) >= 1000 else str(int_answer)
+            
+            if answer in model_answer or str(int_answer) in model_answer or formatted_answer in model_answer:
+                return True
+            else:
+                return False
+            
+        except:
             return False
-        
-    except:
-        if answer in model_answer:
-            return True
-        else:
-            return False
+
 
 def make_train(read_path, data_num, n_round):
     
@@ -127,6 +131,9 @@ def dynamic_temperature_scheduler(current_round, max_rounds=8):
 def first_round(model_path:str, data_num:int, output_path:str, template:str, dataset:str, vllm:bool, model, tokenizer):
 
     read_path = f"/mnt/userdata/liangsirui/MyProject/Prefix/dataset/{dataset}/train.json"
+    if not os.path.exists(read_path):
+        read_path = f"/mnt/userdata/MyProject/Prefix/dataset/{dataset}/train.json"
+    
     save_path = os.path.join(output_path, dataset, f"{dataset}_1.json")
     data_dict = make_train(read_path, data_num, 1)
     
@@ -147,11 +154,11 @@ def first_round(model_path:str, data_num:int, output_path:str, template:str, dat
             prompt = template % question
             prompts.append(prompt)
 
-        print(f'current temperature {0}')
+        print(f'current temperature 0  current max_length {max_length}')
         
         sampling_params = SamplingParams(
             temperature=0.0,
-            max_tokens=4096,
+            max_tokens=max_length,
             stop=[], 
             skip_special_tokens=True
         )
@@ -160,6 +167,7 @@ def first_round(model_path:str, data_num:int, output_path:str, template:str, dat
         for i, output in enumerate(outputs):
             generated_text = output.outputs[0].text
             answer_dict[i]['base'] = generated_text
+            answer_dict[i]['eval'] = eval_one_data(answer_dict[i]['base'], answer_dict[i]['Answer'])
             
     else:
         for i in tqdm(range(len(dataset))):
@@ -177,6 +185,7 @@ def first_round(model_path:str, data_num:int, output_path:str, template:str, dat
 
             completion_good = tokenizer.decode(outputs[0], skip_special_tokens=True)
             answer_dict[i]['base'] = completion_good
+            
     
     remove_list = []
     for key in answer_dict.keys():
@@ -217,13 +226,14 @@ def the_next_round(model_path:str, data_num:int, output_path:str, template:str, 
                 
                 index.append(key)
                 prompts.append(prompt)
-        
-        temperature = dynamic_temperature_scheduler(n_round, 8)
-        print(f'current temperature {temperature}')
+
+        # temperature = dynamic_temperature_scheduler(n_round, 8)
+        temperature = temperature_list[n_round-1]
+        print(f'current temperature {temperature}   current max_length {max_length}')
 
         sampling_params = SamplingParams(
             temperature=temperature,
-            max_tokens=4096,
+            max_tokens=max_length,
             stop=[], 
             skip_special_tokens=True
         )
@@ -233,8 +243,13 @@ def the_next_round(model_path:str, data_num:int, output_path:str, template:str, 
         for key, output in zip(index, outputs):
             generated_text = output.outputs[0].text
             answer_dict[key]['base'] = generated_text
+            answer_dict[key]['eval'] = eval_one_data(generated_text, answer_dict[key]['Answer'])
         
         save_list_to_json(answer_dict, save_path)
+        
+        return len(prompts)
+
+
 
 def train_model(model_path:str, data_num:int, output_path:str, template_index:int, dataset:str, vllm:bool):
 
@@ -255,9 +270,9 @@ def train_model(model_path:str, data_num:int, output_path:str, template_index:in
         model = LLM(
             model=model_path,
             trust_remote_code=True,
-            tensor_parallel_size=parallel_size,  # 暂时禁用tensor并行
+            tensor_parallel_size=parallel_size,  
             gpu_memory_utilization=0.9,
-            disable_custom_all_reduce=True  # 添加此参数
+            # disable_custom_all_reduce=True  # 添加此参数
         )
 
         tokenizer = model.get_tokenizer()
@@ -267,11 +282,13 @@ def train_model(model_path:str, data_num:int, output_path:str, template_index:in
             model_path, device_map="auto", trust_remote_code=True)
 
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            model_path, model_max_length=2048,
+            model_path, model_max_length=max_length,
             padding_side="right", use_fast=False)
         tokenizer.pad_token = tokenizer.eos_token
         model.eval()
 
+    current_count = 0
+    
     for current_round in range(1, n_round+1):
         print(f'This is the {current_round} round')
         if current_round==1:
@@ -280,12 +297,18 @@ def train_model(model_path:str, data_num:int, output_path:str, template_index:in
                 print(f"file {save_path} is exists, gap {current_round} round")
                 continue
             first_round(model_path, data_num, output_path, template, dataset, vllm, model, tokenizer)
+
         else:
             save_path = os.path.join(output_path, dataset, f"{dataset}_{current_round}.json")
             if os.path.isfile(save_path):
                 print(f"file {save_path} is exists, gap {current_round} round")
                 continue
-            the_next_round(model_path, data_num, output_path, template, dataset, current_round, vllm, model, tokenizer)
+
+            pre_count = current_count
+            current_count = the_next_round(model_path, data_num, output_path, template, dataset, current_round, vllm, model, tokenizer)
+
+            if pre_count == current_count:
+                break 
 
 
 def main():

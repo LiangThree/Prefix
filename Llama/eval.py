@@ -79,23 +79,9 @@ def eval_data(
         eval_num: int = None
 ):
     data = read_json_file(data_path)
-    
-    if "attn_o" in data_path:
-        eval_type = "attn_o"
-    elif "attn_q" in data_path:
-        eval_type = "attn_q"
-    elif "attn_k" in data_path:
-        eval_type = "attn_k"
-    elif "attn_v" in data_path:
-        eval_type = "attn_v"
-    elif "ffn" in data_path:
-        eval_type = "ffn"
-    elif "lora" in data_path:
-        eval_type = "lora"
-    elif "base" in data_path:
-        eval_type = "base"
-    elif "lofit" in data_path:
-        eval_type = "lofit"
+    file_name = data_path.split('/')[-1]
+
+    eval_type = "attn_o"
     
     correct_count = 0
     question_count = 0
@@ -112,28 +98,39 @@ def eval_data(
         model_answer = one_data[eval_type]
         question_count += 1
 
-        # model_answer = extract_response(model_answer, data_path)
-        
-        int_answer = float(one_data["Answer"])
-
-        if int_answer.is_integer():
-            int_answer = str(int(int_answer))
-            formatted_answer = f"{int_answer:,}" if abs(int_answer) >= 1000 else str(int_answer)
-        
-        if answer in model_answer or int_answer in model_answer or formatted_answer in model_answer:
+        if answer in model_answer:
             one_data["eval"] = True
+        else:
+            try:
+                int_answer = float(answer)
+
+                if int_answer.is_integer():
+                    int_answer = int(int_answer)
+                    formatted_answer = f"{int_answer:,}" if abs(int_answer) >= 1000 else str(int_answer)
+                
+                if answer in model_answer or str(int_answer) in model_answer or formatted_answer in model_answer:
+                    one_data["eval"] = True
+                else:
+                    one_data["eval"] = False
+                
+            except:
+                one_data["eval"] = False
+        
+        if one_data["eval"]:
             correct_count += 1
+
     
     if question_count==0:
         return
     
-    op_position = train_config["op_position"]
+    dataset = train_config["dataset"]
     data_num = train_config["data_num"]
-    template_index = train_config["template_index"]
+    epoch = train_config["epoch"]
     lr = train_config["lr"]
+    prefix = train_config["prefix"]
     acc= (correct_count/question_count)*100
-    if template_index != "template0":
-        print(f"|{op_position}|{data_num}|{template_index}|{lr}|{correct_count}|{question_count}|{acc:.1f}|")
+    print(f"|{file_name}|{dataset}|{data_num}|{epoch}|{prefix}|{lr}|{correct_count}|{question_count}|{acc:.1f}|")
+    
     save_list_to_json(data, data_path)
 
 
@@ -143,63 +140,18 @@ from typing import List, Dict
 def parse_training_config(path: str) -> Dict[str, str]:
     path_parts = path.split("/")
 
-    config_path = path_parts[2]
-    template = path_parts[3]
+    config_path = path_parts[3]
+    epoch = path_parts[4]
 
-    if 'base' in path.lower():
-        train_config = {
-            "data_num": "base",
-            "op_position": "base",
-            "template_index": template,
-            "lr": "None"
-        }
-        return train_config
-    
-    elif 'lora' in path:
-        parts = config_path.split("_")
-        train_config = {
-            "data_num": parts[0],
-            "op_position": "lora",
-            "template_index": template,
-            "lr": parts[-1]
-        }
-    
-    else:
-        parts = config_path.split("_")
-        train_config = {
-            "data_num": parts[0],
-            "op_position": "red",
-            "template_index": template,
-            "lr": parts[-1]
-        }
+    parts = config_path.split("_")
+    train_config = {
+        "data_num": parts[0],
+        "dataset": parts[1],
+        "epoch": epoch,
+        "lr": parts[-1],
+        "prefix": parts[3]
+    }
 
-        train_config["op_position"] = "base"
-
-        if "bias" in config_path:
-            train_config["op_position"] = "bias"
-        elif "scaling" in config_path:
-            train_config["op_position"] = "scaling"
-        elif "attn_o" in config_path:
-            train_config["op_position"] = "attn_o"
-        elif "attn_q" in config_path:
-            train_config["op_position"] = "attn_q"
-        elif "attn_k" in config_path:
-            train_config["op_position"] = "attn_k"
-        elif "attn_v" in config_path:
-            train_config["op_position"] = "attn_v"
-        elif "ffn_up" in config_path:
-            train_config["op_position"] = "ffn_up"
-        elif "ffn_down" in config_path:
-            train_config["op_position"] = "ffn_down"
-        elif "ffn" in config_path:
-            train_config["op_position"] = "ffn"
-        elif "lora" in config_path:
-            train_config["op_position"] = "lora"
-        elif "base" in config_path:
-            train_config["op_position"] = "base"
-        elif "lofit" in config_path:
-            train_config["op_position"] = "lofit"
-    
     return train_config
 
 
@@ -213,12 +165,24 @@ if __name__ == "__main__":
 
     json_files = find_json_files(args.data_path)
     print(f"找到 {len(json_files)} 个JSON文件:")
-    print('|op_position|data_num|template_index|lr|correct_count|question_count|accuracy|')
-    print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
+
+    print('math10k')
+    print('|file_name|dataset|data_num|epoch|prefix|lr|correct_count|question_count|accuracy|')
+    print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
     eval_list = []
     for file in json_files:
-        train_config = parse_training_config(file)
-        eval_data(file, train_config, args.eval_num)
+        if 'config' not in file and 'math10k' in file:
+            train_config = parse_training_config(file)
+            eval_data(file, train_config, args.eval_num)
+    
+    print('prm800k')
+    print('|file_name|dataset|data_num|epoch|prefix|lr|correct_count|question_count|accuracy|')
+    print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
+    eval_list = []
+    for file in json_files:
+        if 'config' not in file and 'prm800k' in file:
+            train_config = parse_training_config(file)
+            eval_data(file, train_config, args.eval_num)
     
     # eval_list.append(file)
     # print(eval_list)

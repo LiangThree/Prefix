@@ -126,33 +126,63 @@ def train_model(run_type:str, model_path:str, lora_path:str, data_num:int, templ
 
     answer_dict = read_json_file(data_path)
 
-    for i in tqdm(range(len(dataset))):
+    batch_size = 128
+    all_prompts = [ex["prompt"] for ex in dataset]
+    total_samples = len(all_prompts)
+
+    for batch_idx in tqdm(range(0, total_samples, batch_size)):
+        batch_prompts = all_prompts[batch_idx:batch_idx + batch_size]
         
-        generate_dict = {}
-        prompt = dataset[i]["prompt"]
-        prompt_ids = tokenizer(prompt, return_tensors='pt').to(model.base_model.device)
+        inputs = tokenizer(
+            batch_prompts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=512,
+        ).to("cuda")
         
         outputs = model.generate(
-            **prompt_ids,
-            max_new_tokens=300,
-            do_sample=False,  # 禁用采样
-            num_beams=1,      # 贪婪搜索
-            use_cache=True,    # 启用KV缓存
+            **inputs,
+            max_new_tokens=512,
+            do_sample=False,  
+            num_beams=1,      
+            use_cache=True,    
         )
+        
+        completions = tokenizer.batch_decode(
+            outputs, 
+            skip_special_tokens=True
+        )
+        
+        for i, (prompt, completion) in enumerate(zip(batch_prompts, completions)):
+            global_idx = batch_idx + i
+            answer_dict[str(global_idx)]['lora'] = completion
 
-        # pdb.set_trace()
+    # for i in tqdm(range(len(dataset))):
+        
+    #     generate_dict = {}
+    #     prompt = dataset[i]["prompt"]
+    #     prompt_ids = tokenizer(prompt, return_tensors='pt').to(model.base_model.device)
+        
+    #     outputs = model.generate(
+    #         **prompt_ids,
+    #         max_new_tokens=512,
+    #         do_sample=False,  
+    #         num_beams=1,      
+    #         use_cache=True,    
+    #     )
 
-        completion_good = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        print("------------------------ Question ----------------------------")
-        print('Question:', dataset[i]['Question'])
-        print('Output:', dataset[i]['Output'])
-        print('Answer:', dataset[i]['Answer'])
+    #     completion_good = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    #     print("------------------------ Question ----------------------------")
+    #     print('Question:', dataset[i]['Question'])
+    #     print('Output:', dataset[i]['Output'])
+    #     print('Answer:', dataset[i]['Answer'])
 
-        print("------------------------ Answer ----------------------------")
-        print(completion_good)
-        answer_dict[str(i)]['lora'] = completion_good
+    #     print("------------------------ Answer ----------------------------")
+    #     print(completion_good)
+    #     answer_dict[str(i)]['lora'] = completion_good
 
-        print("------------------------ END ----------------------------\n\n")
+    #     print("------------------------ END ----------------------------\n\n")
     
     save_list_to_json(answer_dict, data_path)
 

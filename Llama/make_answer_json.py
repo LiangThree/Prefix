@@ -1,5 +1,5 @@
 import json
-
+import os
 data_name = "gsm8k"
 # data_name = "AQuA"
 
@@ -31,7 +31,9 @@ def save_list_to_json(data_list, file_path):
     print(f"数据已成功存储到 {file_path}")
 
 def make_answer(data_name, data_path):
-    file_path = f"/mnt/userdata/liangsirui/MyProject/ReFT/dataset/{data_name}/test.json"
+    file_path = f"dataset/{data_name}/test.json"
+    if not os.path.exists(file_path):
+        file_path = f"/mnt/userdata/liangsirui/MyProject/Prefix/dataset/{data_name}/test.json"
     data = read_json_file(file_path) 
 
     data_dict = {}
