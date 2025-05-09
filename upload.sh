@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# git remote rm origin
+# git remote add origin https://github.com/LiangThree/Prefix.git
+
 if [ ! -d .git ]; then
   git init
 fi

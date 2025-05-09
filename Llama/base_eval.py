@@ -4,6 +4,12 @@ from datasets import Dataset
 from transformers import DataCollatorForLanguageModeling, TrainingArguments, Trainer
 from peft import LoraConfig, get_peft_model
 import os
+import sys
+
+cur_path = os.path.dirname(os.path.abspath(__file__))
+main_dir = "/".join(cur_path.split("/")[:-1])
+sys.path.append(main_dir)
+
 import json
 import pdb
 from datasets import load_dataset, Dataset
@@ -12,6 +18,7 @@ from peft import PeftModel
 from tqdm import *
 from template import *
 from make_answer_json import make_answer
+from transformers import GenerationConfig
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 from vllm import LLM, SamplingParams
@@ -65,7 +72,14 @@ def save_list_to_json(data_list, file_path):
         json.dump(data_list, f, ensure_ascii=False, indent=4)  # 使用 indent 格式化 JSON
     print(f"数据已成功存储到 {file_path}")
 
-def train_model(model_path:str, data_num:int, output_path:str, template_index:int, dataset:str, vllm:bool):
+def train_model(model_path:str, data_num:int, output_path:str, dataset:str, vllm:bool):
+
+    vllm = False
+
+    if 'llama' in model_path.lower():
+        template_index = 3
+    elif 'qwen' in model_path.lower():
+        template_index = 4
 
     print("template_index:", template_index)
     print("----------------------- template -----------------------")
@@ -106,13 +120,16 @@ def train_model(model_path:str, data_num:int, output_path:str, template_index:in
         tokenizer = model.get_tokenizer()
 
     else:
+        
         model = transformers.AutoModelForCausalLM.from_pretrained(
             model_path, device_map="auto", trust_remote_code=True)
 
         tokenizer = transformers.AutoTokenizer.from_pretrained(
             model_path, model_max_length=2048,
-            padding_side="right", use_fast=False)
+            padding_side="left", use_fast=False)
+        
         tokenizer.pad_token = tokenizer.eos_token
+        
         model.eval()
 
     def process_alpacaeval(example):
@@ -123,6 +140,7 @@ def train_model(model_path:str, data_num:int, output_path:str, template_index:in
 
     dataset = load_custom_dataset(data_path, data_num)
     dataset = dataset.map(process_alpacaeval)
+    
     answer_dict = read_json_file(data_path)
 
     if vllm:
@@ -138,32 +156,72 @@ def train_model(model_path:str, data_num:int, output_path:str, template_index:in
             answer_dict[str(i)]['base'] = generated_text
     
     else:
-        for i in tqdm(range(len(dataset))):
+        batch_size = 64
+        all_prompts = [ex["prompt"] for ex in dataset]
+        total_samples = len(all_prompts)
+
+        generation_config = GenerationConfig(
+            do_sample=False,
+            no_repeat_ngram_size=5,
+            repetition_penalty=1.1,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            bos_token_id=1,
+        )
+
+        for batch_idx in tqdm(range(0, total_samples, batch_size)):
+            batch_prompts = all_prompts[batch_idx:batch_idx + batch_size]
             
-            generate_dict = {}
-            prompt = dataset[i]["prompt"]
-            prompt_ids = tokenizer(prompt, return_tensors='pt').to(model.base_model.device)
+            inputs = tokenizer(
+                batch_prompts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,
+            ).to("cuda")
             
             outputs = model.generate(
-                **prompt_ids,
-                max_new_tokens=300,
-                do_sample=False,  # 禁用采样
-                num_beams=1,      # 贪婪搜索
-                use_cache=True,    # 启用KV缓存
+                **inputs,
+                max_new_tokens=512,
+                generation_config=generation_config
             )
+            
+            completions = tokenizer.batch_decode(
+                outputs, 
+                skip_special_tokens=True
+            )
+            
+            for i, (prompt, completion) in enumerate(zip(batch_prompts, completions)):
+                global_idx = batch_idx + i
+                answer_dict[str(global_idx)]["base"] = completion
 
-            completion_good = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            answer_dict[str(i)]['base'] = completion_good
 
-            print("------------------------ Question ----------------------------")
-            print('Question:', dataset[i]['Question'])
-            print('Output:', dataset[i]['Output'])
-            print('Answer:', dataset[i]['Answer'])
+        # for i in tqdm(range(len(dataset))):
+            
+        #     generate_dict = {}
+        #     prompt = dataset[i]["prompt"]
+        #     prompt_ids = tokenizer(prompt, return_tensors='pt').to(model.base_model.device)
+            
+        #     outputs = model.generate(
+        #         **prompt_ids,
+        #         max_new_tokens=300,
+        #         do_sample=False,  # 禁用采样
+        #         num_beams=1,      # 贪婪搜索
+        #         use_cache=True,    # 启用KV缓存
+        #     )
 
-            print("------------------------ Answer ----------------------------")
-            print(completion_good.replace(prompt,""))
+        #     completion_good = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        #     answer_dict[str(i)]['base'] = completion_good
 
-            print("------------------------ END ----------------------------\n\n")
+        #     print("------------------------ Question ----------------------------")
+        #     print('Question:', dataset[i]['Question'])
+        #     print('Output:', dataset[i]['Output'])
+        #     print('Answer:', dataset[i]['Answer'])
+
+        #     print("------------------------ Answer ----------------------------")
+        #     print(completion_good.replace(prompt,""))
+
+        #     print("------------------------ END ----------------------------\n\n")
     
     save_list_to_json(answer_dict, data_path)
 
@@ -173,7 +231,6 @@ def main():
     parser.add_argument('-model_path', '--model_path', type=str, default=None)
     parser.add_argument('-output_path', '--output_path', type=str, default=None)
     parser.add_argument('-data_num', '--data_num', type=int)
-    parser.add_argument('-template_index', '--template_index', type=int, default=None)
     parser.add_argument('-dataset', '--dataset', type=str)
     parser.add_argument('-vllm', '--vllm', type=bool)
     args = parser.parse_args()

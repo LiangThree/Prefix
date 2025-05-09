@@ -15,7 +15,7 @@ sys.path.append(main_dir)
 import logging
 import fire
 from datasets import load_dataset, concatenate_datasets
-from transformers import  AutoTokenizer, TrainingArguments
+from transformers import  AutoTokenizer, TrainingArguments, AutoConfig
 from trl import SFTTrainer
 from transformers.trainer_callback import TrainerCallback
 import os
@@ -27,8 +27,8 @@ from sklearn.model_selection import train_test_split
 from transformers.trainer_callback import TrainerCallback
 import torch
 
-MAX_INPUT_LENGTH = 1024
-MAX_LENGTH = 1024
+MAX_INPUT_LENGTH = 512
+MAX_LENGTH = 512
 
 device_map = "auto"
 
@@ -36,10 +36,10 @@ def load_RED_model(model_path, op_position, layer_type, n_prefix):
 
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        device_map=device_map,
         trust_remote_code=True,
         use_auth_token=True,
         torch_dtype=torch.bfloat16,
+        device_map="auto",
     )
     
     if "llama" in model_path.lower():
@@ -66,7 +66,12 @@ class CustomDataCollator(DataCollatorForLanguageModeling):
     def __call__(self, features):
         batch = super().__call__(features)
         weights = [feature.get('weight', 1.0) for feature in features]
+        
         batch['weight'] = torch.tensor(weights, dtype=torch.float32, device=batch['input_ids'].device)
+        batch['labels'] = torch.stack([torch.tensor(f["labels"]) for f in features])
+        batch['input_ids'] = torch.stack([torch.tensor(f["input_ids"]) for f in features])
+        batch['attention_mask'] = torch.stack([torch.tensor(f["attention_mask"]) for f in features])
+
         return batch
 
 
@@ -134,20 +139,38 @@ def save_params_to_json(output_path: str, **kwargs):
         json.dump(kwargs, f, indent=4, ensure_ascii=False)
 
 class WeightedSFTTrainer(SFTTrainer):
+    def _prepare_dataset(self, dataset, *args, **kwargs):
+        return dataset
+    
     def compute_loss(self, model, inputs, return_outputs=False):
+
         weights = inputs.pop('weight')
-        labels = inputs.get('labels')
+        labels = inputs.pop('labels') # 这里注意检查训练的labels是否是我们掩盖处理后的labels
+
         outputs = model(**inputs)
         logits = outputs.logits
 
-        shift_logits = logits[..., :-1, :].contiguous()
+        # 预测值：去掉最后一个位置 [batch_size, seq_len-1, vocab_size]
+        shift_logits = logits[..., :-1, :].contiguous() 
+        
+        # 标签值：去掉第一个位置 [batch_size, seq_len-1]
         shift_labels = labels[..., 1:].contiguous()
-        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-        loss = loss.view(shift_labels.size(0), -1)
 
+        # 逐个位置计算损失
+        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+        loss = loss_fct(
+            shift_logits.view(-1, shift_logits.size(-1)),  # 展平为 [batch_size*(seq_len-1), vocab_size]
+            shift_labels.view(-1)                          # 展平为 [batch_size*(seq_len-1)]
+        )
+        loss = loss.view(shift_labels.size(0), -1)         # 恢复为 [batch_size, seq_len-1]
+
+        # 处理有效标记
         valid_tokens = (shift_labels != -100).float().sum(dim=1).clamp(min=1)
+        
+        # 计算样本平均损失
         sample_loss = loss.sum(dim=1) / valid_tokens
+
+        # 加权总损失
         weighted_loss = (sample_loss * weights).sum()
 
         return (weighted_loss, outputs) if return_outputs else weighted_loss
@@ -161,9 +184,14 @@ def train(
         op_position: str = "",
         learning_rate: str = 2e-5,
         num_train_epochs:  int = 3,
-        template_index: int = None,
         layer_type: str=""
 ):
+    
+    if 'llama' in model_path.lower():
+        template_index = 3
+    elif 'qwen' in model_path.lower():
+        template_index = 4
+
     str_lr = str(learning_rate)
     learning_rate = float(learning_rate)
 
@@ -171,9 +199,7 @@ def train(
     print(prompt_template[template_index])
     print("--------------------------------------------------------")
 
-    path = "/share/kunluo/Models/"
-    if not os.path.exists(path):
-        path = "/mnt/usercache/huggingface/"
+    path = "/mnt/usercache/huggingface/"
     model_path = path + model_path
 
     if not os.path.exists(model_path):
@@ -210,9 +236,9 @@ def train(
     )
     tokenizer.padding_side = "right"
 
-    def process_ultra_preference(example, task_type, k=10):
-        question = example["Question"]
-        output = example["Output"]
+    def process_ultra_preference(example, task_type, k=None):
+        question = example["instruction"]
+        output = example["output"]
 
         template = prompt_template[template_index] % question
         output = f"{output}\n\n "
@@ -264,11 +290,12 @@ def train(
             "labels": labels,
             "task_type": task_type
         })
+
         return example
 
     train_data = load_custom_dataset(data_path, data_num)
 
-    split_dataset = train_data.train_test_split(test_size=0.9, shuffle=True)
+    split_dataset = train_data.train_test_split(test_size=0.1, shuffle=True)
     train_prefix = split_dataset["train"]
     train_full = split_dataset["test"]
     
@@ -287,6 +314,10 @@ def train(
     # 合并数据集
     combined_data = concatenate_datasets([train_prefix, train_full])
     combined_data = combined_data.filter(lambda x:x["prompt_length"] <= MAX_INPUT_LENGTH and x["text_length"] <= MAX_LENGTH)
+    combined_data = combined_data.remove_columns(
+        ["instruction", "output", "prompt", "text", "text_length", "prompt_length", "input"]
+    )
+
     # 计算样本权重
     n_prefix = len(train_prefix)
     n_full = len(train_full)
@@ -316,8 +347,8 @@ def train(
     training_args = TrainingArguments(
         output_dir=output_dir,
         logging_dir=log_dir,
-        per_device_train_batch_size=4,
-        gradient_accumulation_steps=4,
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=8,
         learning_rate=learning_rate,
         logging_steps=1,
         save_strategy="no",
@@ -335,11 +366,20 @@ def train(
         mlm=False,
     )
 
+    def formatting_func(example):
+        return {
+            "input_ids": example["input_ids"],
+            "attention_mask": example["attention_mask"],
+            "labels": example["labels"],
+            "task_type": example["task_type"]
+        }
+
     trainer = WeightedSFTTrainer(
         model=model,
-        dataset_text_field="text",
+        # dataset_text_field='labels', # 和formatting_func参数2选1
+        formatting_func=formatting_func,
         data_collator=data_collator,
-        max_seq_length=1024,
+        max_seq_length=MAX_LENGTH,
         train_dataset=combined_data,
         tokenizer=tokenizer,
         args=training_args,

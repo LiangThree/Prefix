@@ -1,0 +1,13 @@
+Step 1: {'loss': 9.5133, 'learning_rate': 1.183431952662722e-06, 'epoch': 0.0}
+Step 2: {'loss': 9.716, 'learning_rate': 2.366863905325444e-06, 'epoch': 0.0}
+Step 3: {'loss': 10.1918, 'learning_rate': 3.550295857988166e-06, 'epoch': 0.01}
+Step 4: {'loss': 8.4888, 'learning_rate': 4.733727810650888e-06, 'epoch': 0.01}
+Step 5: {'loss': 8.8582, 'learning_rate': 5.917159763313609e-06, 'epoch': 0.01}
+Step 6: {'loss': 10.1532, 'learning_rate': 7.100591715976332e-06, 'epoch': 0.01}
+Step 7: {'loss': 9.6979, 'learning_rate': 8.284023668639054e-06, 'epoch': 0.01}
+Step 8: {'loss': 8.9653, 'learning_rate': 9.467455621301776e-06, 'epoch': 0.01}
+Step 9: {'loss': 9.4729, 'learning_rate': 1.0650887573964498e-05, 'epoch': 0.02}
+Step 10: {'loss': 9.4371, 'learning_rate': 1.1834319526627219e-05, 'epoch': 0.02}
+Step 11: {'loss': 9.5527, 'learning_rate': 1.3017751479289941e-05, 'epoch': 0.02}
+Step 12: {'loss': 8.424, 'learning_rate': 1.4201183431952663e-05, 'epoch': 0.02}
+Step 13: {'loss': 8.5107, 'learning_rate': 1.5384615384615387e-05, 'epoch': 0.02}

@@ -8,7 +8,7 @@ import json
 import torch.optim as optim
 
 cur_path = os.path.dirname(os.path.abspath(__file__))
-main_dir = "/".join(cur_path.split("/")[:-2])
+main_dir = "/".join(cur_path.split("/")[:-1])
 sys.path.append(main_dir)
 
 import logging
@@ -21,7 +21,8 @@ import os
 import torch
 from transformers import AutoModelForCausalLM
 from model import ActivationLLama
-
+from transformers import DataCollatorForLanguageModeling
+from functools import partial
 
 MAX_INPUT_LENGTH = 512
 MAX_LENGTH = 512
@@ -115,15 +116,15 @@ def load_custom_dataset(
     返回:
         Dataset对象或包含多个划分的DatasetDict
     """
-    data_path = "/mnt/userdata/MyProject/" 
+    data_path = "/mnt/userdata/MyProject/Prefix/" 
     if not os.path.exists(data_path):
-        data_path = "/mnt/userdata/liangsirui/MyProject/"
+        data_path = "/mnt/userdata/liangsirui/MyProject/Prefix/"
     file_path = data_path + json_path
 
     # 加载原始数据集
     dataset = load_dataset('json', data_files=file_path, split='train')
     dataset = dataset.select(range(data_num))
-    
+
     # 处理数据集划分
     if isinstance(split, float) and 0 < split < 1:
         dataset = dataset.train_test_split(test_size=1-split, shuffle=True)
@@ -145,9 +146,14 @@ def train(
         op_position: str = "",
         learning_rate: float = 2e-5,
         num_train_epochs:  int = 3,
-        template_index: int = None,
-        layer_type: str=""
+        layer_type: str="",
+        n_prefix: int = None,
 ):
+    
+    if 'llama' in model_path.lower():
+        template_index = 3
+    elif 'qwen' in model_path.lower():
+        template_index = 4
     
     print("----------------------- template -----------------------")
     print(prompt_template[template_index])
@@ -187,30 +193,40 @@ def train(
     )
     tokenizer.padding_side = "right"
 
-    def process_ultra_preference(example):
-        # template = "Human: {prompt}\n\nAssistant: "
-        # prompt = example["instruction"]
+    def process_ultra_preference(example, k):
         
         question = example["instruction"]
         output = example["output"]
-        answer = example["answer"]
 
         template = prompt_template[template_index] % question
         output = f"{output}\n\n "
-        
-        # template = f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+
+         # 拼接完整文本并分词
+        full_text = template + output + " </s>"
+        tokenized_full = tokenizer(full_text, truncation=True, max_length=MAX_LENGTH)
 
         example["prompt"] = template
         example["prompt_length"] = len(tokenizer(example["prompt"]).input_ids)
         example["output"] = output
         example["text"] = example["prompt"] + example["output"] + " </s>"
         example["text_length"] = len(tokenizer(example["text"]).input_ids)
+
+        # 初始化labels为全屏蔽
+        labels = [-100] * len(tokenized_full["input_ids"])
+        # 设置前k个输出token的labels
+
+        output_start = example["prompt_length"]
+        for i in range(output_start-1, min(output_start + k-1, len(tokenized_full["input_ids"])-1)):
+            labels[i] = tokenized_full["input_ids"][i+1]
         
         return example
 
     # train_data = load_dataset(data_path,"default")["train_sft"]
     train_data = load_custom_dataset(data_path, data_num)
-    train_data = train_data.map(process_ultra_preference,num_proc=8)
+    train_data = train_data.map(
+        partial(process_ultra_preference, k=k),
+        num_proc=8
+    )
     train_data = train_data.filter(lambda x:x["prompt_length"] <= MAX_INPUT_LENGTH and x["text_length"] <= MAX_LENGTH)
     custom_saving_callback = CustomModelSavingCallback()
 
@@ -249,11 +265,17 @@ def train(
         weight_decay=1e-2,
     )
 
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer,
+        mlm=False,
+        pad_to_multiple_of=8
+    )
+
     trainer = SFTTrainer(
         model=model,
         train_dataset=train_data,
-        # dataset_text_field="text",
-        # max_length=MAX_LENGTH, 
+        data_collator=data_collator,
+        max_length=MAX_LENGTH, 
         tokenizer=tokenizer,
         args=training_args,
         callbacks=[custom_saving_callback, ActivationScalingMonitor(model), LogSaverCallback()],

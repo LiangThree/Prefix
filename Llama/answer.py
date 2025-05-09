@@ -77,11 +77,14 @@ def main(
         is_train_return:bool = True,
         no_repeat_ngram_size: int = 0,
         repetition_penalty: float = 1.2,
-        template_index: int = None,
         dataset: str=""
 ):
+    if 'llama' in model_path.lower():
+        template_index = 3
+    elif 'qwen' in model_path.lower():
+        template_index = 4
     
-    data_path = os.path.join(peft_path, f'{dataset}_eval.json')
+    data_path = os.path.join(peft_path, f'{dataset}_eval_prefix{n_prefix}.json')
     
     print("----------------------- template -----------------------")
     print(prompt_template[template_index])
@@ -169,7 +172,7 @@ def main(
     answer_dict = read_json_file(data_path)
 
     # A100 * 1: batch_size=128
-    batch_size = 128
+    batch_size = 64
     all_prompts = [ex["prompt"] for ex in dataset]
     total_samples = len(all_prompts)
 
@@ -197,7 +200,7 @@ def main(
         
         for i, (prompt, completion) in enumerate(zip(batch_prompts, completions)):
             global_idx = batch_idx + i
-            answer_dict[str(global_idx)][op_position] = completion
+            answer_dict[str(global_idx)]["red"] = completion
 
     
     # for i in tqdm(range(len(dataset))):
@@ -218,7 +221,6 @@ def main(
     #     print('Output:', dataset[i]['Output'])
     #     print('Answer:', dataset[i]['Answer'])
         
-
     #     print("------------------------ Answer ----------------------------")
     #     print(completion_good.replace(prompt, ""))
         

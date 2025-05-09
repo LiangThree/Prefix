@@ -81,7 +81,12 @@ def eval_data(
     data = read_json_file(data_path)
     file_name = data_path.split('/')[-1]
 
-    eval_type = "attn_o"
+    if "attn_o" in data[list(data.keys())[0]].keys():
+        eval_type = "attn_o"
+    elif "base" in data[list(data.keys())[0]].keys():
+        eval_type = "base"
+    elif "ffn_up" in data[list(data.keys())[0]].keys():
+        eval_type = "ffn_up"  
     
     correct_count = 0
     question_count = 0
@@ -166,7 +171,7 @@ if __name__ == "__main__":
     json_files = find_json_files(args.data_path)
     print(f"找到 {len(json_files)} 个JSON文件:")
 
-    print('math10k')
+    print(f'{args.data_path} math10k')
     print('|file_name|dataset|data_num|epoch|prefix|lr|correct_count|question_count|accuracy|')
     print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
     eval_list = []
@@ -175,14 +180,14 @@ if __name__ == "__main__":
             train_config = parse_training_config(file)
             eval_data(file, train_config, args.eval_num)
     
-    print('prm800k')
-    print('|file_name|dataset|data_num|epoch|prefix|lr|correct_count|question_count|accuracy|')
-    print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
-    eval_list = []
-    for file in json_files:
-        if 'config' not in file and 'prm800k' in file:
-            train_config = parse_training_config(file)
-            eval_data(file, train_config, args.eval_num)
+    # print('prm800k')
+    # print('|file_name|dataset|data_num|epoch|prefix|lr|correct_count|question_count|accuracy|')
+    # print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
+    # eval_list = []
+    # for file in json_files:
+    #     if 'config' not in file and 'prm800k' in file:
+    #         train_config = parse_training_config(file)
+    #         eval_data(file, train_config, args.eval_num)
     
     # eval_list.append(file)
     # print(eval_list)

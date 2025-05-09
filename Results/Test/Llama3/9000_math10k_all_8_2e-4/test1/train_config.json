@@ -1,7 +1,0 @@
-{
-    "model_path": "/mnt/usercache/huggingface/Meta-Llama-3-8B-Instruct",
-    "data_path": "dataset/math10k/clean_train.json",
-    "data_num": 9000,
-    "op_position": "attn_o",
-    "template_index": 3
-}
