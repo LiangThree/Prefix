@@ -76,9 +76,9 @@ class ActivationLayer(nn.Module):
             
             self.modify_count = 0
             
-            # if self.layer_idx == 1:
-            #     print('layer_idx:', self.layer_idx, f'{x.shape} modify')
-
+            if self.layer_idx == 1:
+                print('layer_idx:', self.layer_idx, f'{x.shape} modify')
+            
             if(self.layer_type=="all"):
                 self.delta_vector.to(hidden_states.device)
                 hidden_states = hidden_states * self.delta_vector["activation_scaling"]
@@ -97,8 +97,8 @@ class ActivationLayer(nn.Module):
             
                 self.modify_count += 1
 
-                # if self.layer_idx == 1:
-                #     print('layer_idx:', self.layer_idx, f'{x.shape} modify', f'{self.modify_count} modify_count')
+                if self.layer_idx == 1:
+                    print('layer_idx:', self.layer_idx, f'{x.shape} modify', f'{self.modify_count} modify_count')
 
                 if(self.layer_type=="all"):
                     self.delta_vector.to(hidden_states.device)

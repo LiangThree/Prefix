@@ -1,3 +1,4 @@
+
 import argparse
 import torch, transformers
 from datasets import Dataset
@@ -10,12 +11,17 @@ from datasets import load_dataset, Dataset
 from typing import Optional, Union
 from transformers.trainer_callback import TrainerCallback
 
+import os
+
 import sys
 cur_path = os.path.dirname(os.path.abspath(__file__))
 main_dir = "/".join(cur_path.split("/")[:-1])
 sys.path.append(main_dir)
 
 from template import *
+
+import torch
+print(torch.cuda.is_available())  # 应该输出True
 
 device = "cuda"
 
@@ -30,7 +36,14 @@ def get_data(data_files:str, data_num:int, split:Optional[Union[str, float]] = N
     
     return dataset['train'], dataset['test']
 
-def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_num:int, template_index:int, learning_rate: float = 2e-5,):
+def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_num:int, learning_rate: float = 2e-5,):
+
+    if 'llama' in model_path.lower():
+        template_index = "llama3"
+    elif 'qwen' in model_path.lower() and 'math' in model_path.lower():
+        template_index = "qwen_math"
+    elif 'qwen' in model_path.lower():
+        template_index = "qwen_base"
 
     path = "/mnt/usercache/huggingface/"
     if not os.path.exists(path):
@@ -46,7 +59,7 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
     prompt = prompt_template[template_index]
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
-        model_path, device_map=device, trust_remote_code=True)
+        model_path, device_map="auto", trust_remote_code=True).to(device)
 
     # get tokenizer
     tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -65,13 +78,13 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
 
     # 将数据转换为 Hugging Face 的 Dataset 格式
     train_dataset = Dataset.from_dict({
-        "input": [prompt % example['Question'] for example in train_data],
-        "output": [example['Output'] for example in train_data]
+        "input": [prompt % example['instruction'] for example in train_data],
+        "output": [example['output'] for example in train_data]
     })
 
     valid_dataset = Dataset.from_dict({
-        "input": [prompt % example['Question'] for example in eval_data],
-        "output": [example['Output'] for example in eval_data]
+        "input": [prompt % example['instruction'] for example in eval_data],
+        "output": [example['output'] for example in eval_data]
     })
 
     def tokenize_function(example):
@@ -97,9 +110,9 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
                     f.write(f"Step {state.global_step}: {logs}\n")
 
     training_args = TrainingArguments(
-        output_dir="./lora_output",
-        overwrite_output_dir=True,
-        fp16=True,
+        output_dir="./lora/lora_output",
+        overwrite_output_dir=True, 
+        fp16=False,
         per_device_train_batch_size=4,
         per_device_eval_batch_size=4,
         learning_rate=learning_rate,
@@ -134,7 +147,6 @@ def main():
     parser.add_argument('-data_num', '--data_num', type=int)
     parser.add_argument('-layer', '--layer', type=int, default=None)
     parser.add_argument('-learning_rate', '--learning_rate', type=float, default=None)
-    parser.add_argument('-template_index', '--template_index', type=int, default=None)
     args = parser.parse_args()
 
     train_model(**vars(args))

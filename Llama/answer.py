@@ -80,10 +80,12 @@ def main(
         dataset: str=""
 ):
     if 'llama' in model_path.lower():
-        template_index = 3
+        template_index = "llama3"
+    elif 'qwen' in model_path.lower() and 'math' in model_path.lower():
+        template_index = "qwen_math"
     elif 'qwen' in model_path.lower():
-        template_index = 4
-    
+        template_index = "qwen_base"
+
     data_path = os.path.join(peft_path, f'{dataset}_eval_prefix{n_prefix}.json')
     
     print("----------------------- template -----------------------")
@@ -109,7 +111,13 @@ def main(
     if os.path.exists(peft_path):
         print(f'{peft_path} exists')
 
-    op_position = "attn_o"
+    if "attn_o" in peft_path.lower():
+        op_position = "attn_o"
+    elif "ffn_up" in peft_path.lower():
+        op_position = "ffn_up"
+    else:
+        print("Can't find op_position!")
+        exit(0)
 
     eval_config = {
         "model_path": model_path,
@@ -159,22 +167,35 @@ def main(
     generate_list = []
     
     generation_config = GenerationConfig(
-            do_sample=False,
-            no_repeat_ngram_size=no_repeat_ngram_size if no_repeat_ngram_size > 0 else 0,
-            repetition_penalty=repetition_penalty,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            # pad_token_id=0,
-            # eos_token_id=2,
-            bos_token_id=1,
-        )
-    
+        do_sample=False,
+        no_repeat_ngram_size=no_repeat_ngram_size if no_repeat_ngram_size > 0 else 0,
+        repetition_penalty=repetition_penalty,
+        pad_token_id=tokenizer.eos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        # pad_token_id=0,
+        # eos_token_id=2,
+        bos_token_id=1,
+    )
+
     answer_dict = read_json_file(data_path)
 
     # A100 * 1: batch_size=128
-    batch_size = 64
+    batch_size = 128
     all_prompts = [ex["prompt"] for ex in dataset]
     total_samples = len(all_prompts)
+
+    # prompt = "This is a test prompt."
+    # messages = [
+    #     {"role": "system", "content": "Please reason step by step, and put your final answer within \\boxed{}."},
+    #     {"role": "user", "content": prompt}
+    # ]
+    # text = tokenizer.apply_chat_template(
+    #     messages,
+    #     tokenize=False,
+    #     add_generation_prompt=True,
+    #     enable_thinking=True # Switch between thinking and non-thinking modes. Default is True.
+    # )
+    # pdb.set_trace()
 
     for batch_idx in tqdm(range(0, total_samples, batch_size)):
         batch_prompts = all_prompts[batch_idx:batch_idx + batch_size]

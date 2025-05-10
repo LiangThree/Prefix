@@ -188,9 +188,11 @@ def train(
 ):
     
     if 'llama' in model_path.lower():
-        template_index = 3
+        template_index = "llama3"
+    elif 'qwen' in model_path.lower() and 'math' in model_path.lower():
+        template_index = "qwen_math"
     elif 'qwen' in model_path.lower():
-        template_index = 4
+        template_index = "qwen_base"
 
     str_lr = str(learning_rate)
     learning_rate = float(learning_rate)
@@ -221,7 +223,7 @@ def train(
         "op_position": op_position,
         "template_index": template_index
     }
-    output_dir = os.path.join(output_dir, f"epoch{num_train_epochs}")
+    output_dir = os.path.join(output_dir, f"{op_position}")
     log_dir = os.path.join(output_dir, "log")
 
     if not os.path.exists(output_dir):

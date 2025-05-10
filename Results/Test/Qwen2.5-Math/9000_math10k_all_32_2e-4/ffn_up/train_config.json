@@ -1,0 +1,7 @@
+{
+    "model_path": "/mnt/usercache/huggingface/Qwen2.5-Math-7B-Instruct",
+    "data_path": "dataset/math10k/train.json",
+    "data_num": 9000,
+    "op_position": "ffn_up",
+    "template_index": "qwen_math"
+}

@@ -76,10 +76,15 @@ def train_model(model_path:str, data_num:int, output_path:str, dataset:str, vllm
 
     vllm = False
 
+    print(f'Model: {model_path}')
+
     if 'llama' in model_path.lower():
-        template_index = 3
+        template_index = "llama3"
+    elif 'qwen' in model_path.lower() and 'math' in model_path.lower():
+        template_index = "qwen_math"
     elif 'qwen' in model_path.lower():
-        template_index = 4
+        template_index = "qwen_base"
+
 
     print("template_index:", template_index)
     print("----------------------- template -----------------------")

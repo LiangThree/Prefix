@@ -20,7 +20,7 @@ from transformers.trainer_callback import TrainerCallback
 import os
 import torch
 from transformers import AutoModelForCausalLM
-from model import ActivationLLama
+from model import ActivationLLama, ActivationQwen
 from transformers import DataCollatorForLanguageModeling
 from functools import partial
 
@@ -39,7 +39,12 @@ def load_RED_model(model_path, op_position, layer_type):
         use_auth_token=True,
         torch_dtype=torch.bfloat16,
     )
-    model = ActivationLLama(model,op_position=op_position, layer_type=layer_type)
+
+    if "llama" in model_path.lower():
+        model = ActivationLLama(model, op_position=op_position, layer_type=layer_type, prefix=-1)
+    elif "qwen" in model_path.lower():
+        model = ActivationQwen(model, op_position=op_position, layer_type=layer_type, prefix=-1)
+    
     return model
 
 
@@ -147,7 +152,6 @@ def train(
         learning_rate: float = 2e-5,
         num_train_epochs:  int = 3,
         layer_type: str="",
-        n_prefix: int = None,
 ):
     
     if 'llama' in model_path.lower():
@@ -193,38 +197,31 @@ def train(
     )
     tokenizer.padding_side = "right"
 
-    def process_ultra_preference(example, k):
+    def process_ultra_preference(example):
+        # template = "Human: {prompt}\n\nAssistant: "
+        # prompt = example["instruction"]
         
         question = example["instruction"]
         output = example["output"]
+        answer = example["answer"]
 
         template = prompt_template[template_index] % question
         output = f"{output}\n\n "
-
-         # 拼接完整文本并分词
-        full_text = template + output + " </s>"
-        tokenized_full = tokenizer(full_text, truncation=True, max_length=MAX_LENGTH)
+        
+        # template = f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
 
         example["prompt"] = template
         example["prompt_length"] = len(tokenizer(example["prompt"]).input_ids)
         example["output"] = output
         example["text"] = example["prompt"] + example["output"] + " </s>"
         example["text_length"] = len(tokenizer(example["text"]).input_ids)
-
-        # 初始化labels为全屏蔽
-        labels = [-100] * len(tokenized_full["input_ids"])
-        # 设置前k个输出token的labels
-
-        output_start = example["prompt_length"]
-        for i in range(output_start-1, min(output_start + k-1, len(tokenized_full["input_ids"])-1)):
-            labels[i] = tokenized_full["input_ids"][i+1]
         
         return example
 
     # train_data = load_dataset(data_path,"default")["train_sft"]
     train_data = load_custom_dataset(data_path, data_num)
     train_data = train_data.map(
-        partial(process_ultra_preference, k=k),
+        partial(process_ultra_preference),
         num_proc=8
     )
     train_data = train_data.filter(lambda x:x["prompt_length"] <= MAX_INPUT_LENGTH and x["text_length"] <= MAX_LENGTH)
@@ -275,7 +272,8 @@ def train(
         model=model,
         train_dataset=train_data,
         data_collator=data_collator,
-        max_length=MAX_LENGTH, 
+        dataset_text_field="text",
+        # max_length=MAX_LENGTH, 
         tokenizer=tokenizer,
         args=training_args,
         callbacks=[custom_saving_callback, ActivationScalingMonitor(model), LogSaverCallback()],

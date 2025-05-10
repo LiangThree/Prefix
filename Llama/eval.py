@@ -87,6 +87,8 @@ def eval_data(
         eval_type = "base"
     elif "ffn_up" in data[list(data.keys())[0]].keys():
         eval_type = "ffn_up"  
+    elif "red" in data[list(data.keys())[0]].keys():
+        eval_type = "red"  
     
     correct_count = 0
     question_count = 0
@@ -133,6 +135,12 @@ def eval_data(
     epoch = train_config["epoch"]
     lr = train_config["lr"]
     prefix = train_config["prefix"]
+
+    # if "prefix0" in file_name:
+    #     file_name = "gsm8k_eval_base"
+    # elif "prefix-1" in file_name:
+    #     file_name = "gsm8k_eval_reft"
+
     acc= (correct_count/question_count)*100
     print(f"|{file_name}|{dataset}|{data_num}|{epoch}|{prefix}|{lr}|{correct_count}|{question_count}|{acc:.1f}|")
     
@@ -169,16 +177,20 @@ args = parser.parse_args()
 if __name__ == "__main__":
 
     json_files = find_json_files(args.data_path)
-    print(f"找到 {len(json_files)} 个JSON文件:")
+    # print(f"找到 {len(json_files)} 个JSON文件:")
+    if len(json_files) == 0:
+        exit(0)
 
-    print(f'{args.data_path} math10k')
+    print(f'{args.data_path}')
     print('|file_name|dataset|data_num|epoch|prefix|lr|correct_count|question_count|accuracy|')
     print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
     eval_list = []
     for file in json_files:
-        if 'config' not in file and 'math10k' in file:
+        if 'config' not in file:
             train_config = parse_training_config(file)
             eval_data(file, train_config, args.eval_num)
+    
+    print('\n---------------------------------------------------------------------------\n')
     
     # print('prm800k')
     # print('|file_name|dataset|data_num|epoch|prefix|lr|correct_count|question_count|accuracy|')
