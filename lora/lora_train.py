@@ -1,4 +1,3 @@
-
 import argparse
 import torch, transformers
 from datasets import Dataset
@@ -49,7 +48,6 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
     if not os.path.exists(path):
         path = "/mnt/publiccache/huggingface/"
     model_path = path + model_path
-
 
     print("template_index:", template_index)
 
@@ -112,7 +110,7 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
     training_args = TrainingArguments(
         output_dir="./lora/lora_output",
         overwrite_output_dir=True, 
-        fp16=False,
+        fp16=True,
         per_device_train_batch_size=4,
         per_device_eval_batch_size=4,
         learning_rate=learning_rate,

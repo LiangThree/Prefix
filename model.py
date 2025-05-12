@@ -347,6 +347,139 @@ class ActivationLLama(nn.Module):
 
         torch.save(save_dict, save_path)
 
+class ActivationMistral(nn.Module):
+    _no_split_modules = ["MistralDecoderLayer"]
+    
+    def __init__(self, base_model, op_position=None, layer_type="all", exclude_layers=[], prefix=None):
+        super().__init__()
+        self.base_model = base_model
+        self.model_type = "mistral-7b"
+        self.layer_type = layer_type
+        self.op_position = op_position
+        self.exclude_layers = exclude_layers
+        self.prefix = prefix
+        print('n_prefix:', prefix)
+
+        # 排除层模式匹配
+        if exclude_layers:
+            pattern_str = '|'.join(map(str, exclude_layers))
+            self.pattern = re.compile(r'\b(?:' + pattern_str + r')\b')
+        
+        self.frozen_model()
+        key_list = [key for key, _ in base_model.named_modules()]
+        
+        # 遍历所有模块进行替换
+        for key in key_list:
+            if exclude_layers and self.pattern.search(key):
+                continue
+            if self.check_update(key):
+                self.replace_layer(key)   
+
+        print(self.print_trainable_parameters())
+
+    def check_update(self, key):
+        """匹配需要修改的层"""
+        if self.op_position == "ffn_down":
+            return self.match_substring(key)
+        elif self.op_position == "ffn_up":
+            return self.match_substring_up_proj(key)
+        elif self.op_position == "attn_o":
+            return self.match_substring_attn_o_proj(key)
+        elif self.op_position == "attn_q":
+            return self.match_substring_attn_q_proj(key)
+        elif self.op_position == "attn_k":
+            return self.match_substring_attn_k_proj(key)
+        elif self.op_position == "attn_v":
+            return self.match_substring_attn_v_proj(key)
+
+    def replace_layer(self, key):
+        """替换目标层为自定义激活层"""
+        replaced_module = self.base_model.get_submodule(key)
+        parent_key = ".".join(key.split(".")[:-1])
+        parent_module = self.base_model.get_submodule(parent_key)
+        replaced_name_last = key.split(".")[-1]
+        
+        # 从层路径中解析层索引（假设格式为model.layers.2...）
+        layer_idx = int(key.split(".")[2])  
+        
+        # 确定hidden_size维度
+        if "q_proj" in key or "k_proj" in key or "v_proj" in key or "up_proj" in key:
+            hidden_size = replaced_module.out_features  # 线性层的输出维度
+        else:
+            hidden_size = self.base_model.config.hidden_size  # 默认隐藏层维度
+
+        new_module = ActivationLayer(
+            hidden_size=hidden_size,
+            update_layer=replaced_module,
+            layer_type=self.layer_type,
+            op_position=self.op_position,
+            is_bfloat16=True,
+            prefix=self.prefix,
+            layer_idx=layer_idx,
+        )
+        setattr(parent_module, replaced_name_last, new_module)
+
+    def frozen_model(self):
+        """冻结基础模型参数"""
+        for name, param in self.base_model.named_parameters():
+            param.requires_grad = False
+
+    # 以下为匹配不同投影层的方法-----------------------------------
+    def match_substring(self, input_string):
+        return re.search(r'down_proj', input_string) is not None
+    
+    def match_substring_up_proj(self, input_string):
+        return re.search(r'up_proj', input_string) is not None
+    
+    def match_substring_attn_o_proj(self, input_string):
+        return re.search(r'o_proj', input_string) is not None
+    
+    def match_substring_attn_q_proj(self, input_string):
+        return re.search(r'q_proj', input_string) is not None
+
+    def match_substring_attn_k_proj(self, input_string):
+        return re.search(r'k_proj', input_string) is not None
+
+    def match_substring_attn_v_proj(self, input_string):
+        return re.search(r'v_proj', input_string) is not None
+    
+    def generate(self, **args):
+        return self.base_model.generate(**args)
+
+    def print_trainable_parameters(self):
+        """打印可训练参数统计"""
+        total = 0
+        trainable = 0 
+        for param in self.base_model.parameters():
+            total += param.numel()
+            if param.requires_grad:
+                trainable += param.numel()
+    
+        return {
+            "total_params": total,
+            "trainable_params": trainable,
+            "trainable_ratio": f"{100 * trainable / total:.4f}%"
+        }
+
+    def get_save_dict(self):
+        return {k: v for k, v in self.base_model.state_dict().items() 
+                if "activation_" in k}
+
+    def save_model(self, save_path):
+        save_dict = self.get_save_dict()
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        torch.save(save_dict, save_path)
+
+    def load_model(self, save_path):
+        save_dict = torch.load(save_path)
+        for key in self.base_model.state_dict():
+            if key in save_dict:
+                parent_key = ".".join(key.split(".")[:-1])
+                last_name = key.split(".")[-1]
+                module = self.base_model.get_submodule(parent_key)
+                if isinstance(module[last_name], nn.Parameter):
+                    module[last_name].data.copy_(save_dict[key].data)
+
 
 class ActivationQwen(nn.Module):
     

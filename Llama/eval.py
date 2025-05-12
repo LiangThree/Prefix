@@ -81,15 +81,10 @@ def eval_data(
     data = read_json_file(data_path)
     file_name = data_path.split('/')[-1]
 
-    if "attn_o" in data[list(data.keys())[0]].keys():
-        eval_type = "attn_o"
-    elif "base" in data[list(data.keys())[0]].keys():
-        eval_type = "base"
-    elif "ffn_up" in data[list(data.keys())[0]].keys():
-        eval_type = "ffn_up"  
-    elif "red" in data[list(data.keys())[0]].keys():
-        eval_type = "red"  
-    
+    all_key = data["0"].keys()
+    eval_type = set(all_key)-set(["Question", "Answer", "eval", "Output"])
+    eval_type = tuple(eval_type)[0]
+
     correct_count = 0
     question_count = 0
     
@@ -186,9 +181,13 @@ if __name__ == "__main__":
     print('|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|')
     eval_list = []
     for file in json_files:
-        if 'config' not in file:
+        if 'gsm8k' in file:
             train_config = parse_training_config(file)
-            eval_data(file, train_config, args.eval_num)
+            try:
+                eval_data(file, train_config, args.eval_num)
+            except Exception as e:
+                print(f"Error processing file {file}: {e}")
+                continue
     
     print('\n---------------------------------------------------------------------------\n')
     

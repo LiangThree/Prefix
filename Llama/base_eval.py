@@ -6,6 +6,10 @@ from peft import LoraConfig, get_peft_model
 import os
 import sys
 
+from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+from mistral_common.protocol.instruct.messages import UserMessage
+from mistral_common.protocol.instruct.request import ChatCompletionRequest
+
 cur_path = os.path.dirname(os.path.abspath(__file__))
 main_dir = "/".join(cur_path.split("/")[:-1])
 sys.path.append(main_dir)
@@ -84,6 +88,8 @@ def train_model(model_path:str, data_num:int, output_path:str, dataset:str, vllm
         template_index = "qwen_math"
     elif 'qwen' in model_path.lower():
         template_index = "qwen_base"
+    elif 'mistral' in model_path.lower():
+        template_index = "mistral"
 
 
     print("template_index:", template_index)
@@ -136,6 +142,20 @@ def train_model(model_path:str, data_num:int, output_path:str, dataset:str, vllm
         tokenizer.pad_token = tokenizer.eos_token
         
         model.eval()
+    
+    # ------------------------ get Qwen chat template ------------------------
+    # prompt = "This is a test prompt."
+    # messages = [
+    #     {"role": "system", "content": "Please reason step by step, and put your final answer within \\boxed{}."},
+    #     {"role": "user", "content": prompt}
+    # ]
+    # text = tokenizer.apply_chat_template(
+    #     messages,
+    #     tokenize=False,
+    #     add_generation_prompt=True,
+    #     enable_thinking=True # Switch between thinking and non-thinking modes. Default is True.
+    # )
+    # pdb.set_trace()
 
     def process_alpacaeval(example):
         question = example['Question']

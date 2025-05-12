@@ -12,7 +12,6 @@ cur_path = os.path.dirname(os.path.abspath(__file__))
 main_dir = "/".join(cur_path.split("/")[:-1])
 sys.path.append(main_dir)
 
-import logging
 import fire
 from datasets import load_dataset, concatenate_datasets
 from transformers import  AutoTokenizer, TrainingArguments, AutoConfig
@@ -193,6 +192,8 @@ def train(
         template_index = "qwen_math"
     elif 'qwen' in model_path.lower():
         template_index = "qwen_base"
+    elif 'mistral' in model_path.lower():
+        template_index = "mistral"
 
     str_lr = str(learning_rate)
     learning_rate = float(learning_rate)

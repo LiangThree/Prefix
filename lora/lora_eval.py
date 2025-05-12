@@ -1,9 +1,15 @@
 import argparse
+import fire
 import torch, transformers
 from datasets import Dataset
 from transformers import DataCollatorForLanguageModeling, TrainingArguments, Trainer
 from peft import LoraConfig, get_peft_model
 import os
+import sys
+cur_path = os.path.dirname(os.path.abspath(__file__))
+main_dir = "/".join(cur_path.split("/")[:-1])
+sys.path.append(main_dir)
+from Llama.make_answer_json import make_answer
 import json
 import pdb
 from datasets import load_dataset, Dataset
@@ -11,9 +17,7 @@ from typing import Optional, Union
 from peft import PeftModel
 from tqdm import *
 from template import *
-from make_answer_json import make_answer
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4"
 device = "cuda"
 
 def load_custom_dataset(
@@ -77,7 +81,14 @@ def save_list_to_json(data_list, file_path):
         json.dump(data_list, f, ensure_ascii=False, indent=4)  # 使用 indent 格式化 JSON
     print(f"数据已成功存储到 {file_path}")
 
-def train_model(run_type:str, model_path:str, lora_path:str, data_num:int, template_index:int, dataset:str):
+def train_model(model_path:str, lora_path:str, data_num:int, dataset:str):
+
+    if 'llama' in model_path.lower():
+        template_index = "llama3"
+    elif 'qwen' in model_path.lower() and 'math' in model_path.lower():
+        template_index = "qwen_math"
+    elif 'qwen' in model_path.lower():
+        template_index = "qwen_base"
 
     print("template_index:", template_index)
     print("----------------------- template -----------------------")
@@ -85,8 +96,6 @@ def train_model(run_type:str, model_path:str, lora_path:str, data_num:int, templ
     print("--------------------------------------------------------")
     template = prompt_template[template_index]
 
-
-    print(f'------------------- {run_type} ------------------- ')
     path = "/mnt/usercache/huggingface/"
     if not os.path.exists(path):
         path = "/mnt/publiccache/huggingface/"
@@ -96,8 +105,8 @@ def train_model(run_type:str, model_path:str, lora_path:str, data_num:int, templ
     if not os.path.exists(path):
         path = "/mnt/userdata/liangsirui/MyProject/"
     
-    data_path = os.path.join(lora_path, f'template{template_index}', f'{dataset}_eval.json')
-    lora_path = os.path.join(lora_path, f'template{template_index}')
+    data_path = os.path.join(lora_path, f'{dataset}_eval.json')
+    lora_path = os.path.join(lora_path)
 
     if not os.path.isfile(data_path):
         make_answer(dataset, data_path)
@@ -108,7 +117,7 @@ def train_model(run_type:str, model_path:str, lora_path:str, data_num:int, templ
     # get tokenizer
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_path, model_max_length=2048,
-        padding_side="right", use_fast=False)
+        padding_side="left", use_fast=False)
     tokenizer.pad_token = tokenizer.eos_token
 
     model = PeftModel.from_pretrained(model, lora_path)
@@ -126,7 +135,7 @@ def train_model(run_type:str, model_path:str, lora_path:str, data_num:int, templ
 
     answer_dict = read_json_file(data_path)
 
-    batch_size = 128
+    batch_size = 64
     all_prompts = [ex["prompt"] for ex in dataset]
     total_samples = len(all_prompts)
 
@@ -186,18 +195,7 @@ def train_model(run_type:str, model_path:str, lora_path:str, data_num:int, templ
     
     save_list_to_json(answer_dict, data_path)
 
-def main():
-    parser = argparse.ArgumentParser(description="A simple script that takes different arguments.")
-    parser.add_argument('-run_type', '--run_type', type=str, default=None)
-    parser.add_argument('-model_path', '--model_path', type=str, default=None)
-    parser.add_argument('-lora_path', '--lora_path', type=str, default=None)
-    parser.add_argument('-data_num', '--data_num', type=int)
-    parser.add_argument('-template_index', '--template_index', type=int, default=None)
-    parser.add_argument('-dataset', '--dataset', type=str)
-    args = parser.parse_args()
-
-    train_model(**vars(args))
 
 
 if __name__ == '__main__':
-    main()
+    fire.Fire(train_model)

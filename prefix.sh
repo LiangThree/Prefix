@@ -3,66 +3,56 @@
 # layer_type: scaling/bias/all
 # 当学习率达到0.01量级时scaling才会发生变化 
 
-# Meta-Llama-3-8B-Instruct  template: 3
+
+# Meta-Llama-3-8B-Instruct  
 # Meta-Llama-3.1-8B-Instruct 
-# Qwen2.5-Math-7B-Instruct  template: 4
+# Qwen2.5-Math-7B-Instruct
+# Mistral-7B-Instruct-v0.2 
+
 # n_prefix 0:原始模型不调整 -1:reft模型所有位置均调整 n:调整问题及前n个token
 # 训练时n_prefix内置为-1
 
 condition=$1
 
-if [ "$condition" == "red" ]; then
+if [ "$condition" == "prefix" ]; then
 
-    # CUDA_VISIBLE_DEVICES=0 python red_train.py \
+    # CUDA_VISIBLE_DEVICES=0 python prefix_train.py \
     # --model_path "Meta-Llama-3-8B-Instruct" \
     # --data_path  "dataset/math10k/train.json" \
-    # --output_dir "Results/RED/Llama3/" \
+    # --output_dir "Results/Test/Llama3/" \
     # --data_num 9000 \
+    # --n_prefix 32 \
     # --op_position "attn_o" \
     # --learning_rate 2e-4 \
     # --layer_type "all" \
     # --num_train_epochs 3
 
-    CUDA_VISIBLE_DEVICES=0 python red_train.py \
-    --model_path "Qwen2.5-7B-Instruct" \
-    --data_path  "dataset/math10k/train.json" \
-    --output_dir "Results/RED/Qwen2.5-instruct/" \
-    --data_num 9000 \
-    --n_prefix 32 \
-    --op_position "attn_o" \
-    --learning_rate 2e-4 \
-    --layer_type "all" \
-    --num_train_epochs 3
+    # CUDA_VISIBLE_DEVICES=0 python prefix_train.py \
+    # --model_path "Qwen2.5-Math-7B-Instruct" \
+    # --data_path  "dataset/math10k/train.json" \
+    # --output_dir "Results/Test/Qwen2.5-Math/" \
+    # --data_num 9000 \
+    # --n_prefix 32 \
+    # --op_position "attn_o" \
+    # --learning_rate 2e-4 \
+    # --layer_type "all" \
+    # --num_train_epochs 3
 
-
-elif [ "$condition" == "prefix" ]; then
-
-    CUDA_VISIBLE_DEVICES=0 python prefix_train.py \
-    --model_path "Meta-Llama-3-8B-Instruct" \
-    --data_path  "dataset/math10k/train.json" \
-    --output_dir "Results/Test/Llama3/" \
-    --data_num 9000 \
-    --n_prefix 32 \
-    --op_position "attn_o" \
-    --learning_rate 2e-4 \
-    --layer_type "all" \
-    --num_train_epochs 3
+    # CUDA_VISIBLE_DEVICES=0 python prefix_train.py \
+    # --model_path "Qwen2.5-7B-Instruct" \
+    # --data_path  "dataset/math10k/train.json" \
+    # --output_dir "Results/Test/Qwen2.5/" \
+    # --data_num 9000 \
+    # --n_prefix 32 \
+    # --op_position "attn_o" \
+    # --learning_rate 2e-4 \
+    # --layer_type "all" \
+    # --num_train_epochs 3
 
     CUDA_VISIBLE_DEVICES=0 python prefix_train.py \
-    --model_path "Qwen2.5-Math-7B-Instruct" \
+    --model_path "Mistral-7B-Instruct-v0.2" \
     --data_path  "dataset/math10k/train.json" \
-    --output_dir "Results/Test/Qwen2.5-Math/" \
-    --data_num 9000 \
-    --n_prefix 32 \
-    --op_position "attn_o" \
-    --learning_rate 2e-4 \
-    --layer_type "all" \
-    --num_train_epochs 3
-
-    CUDA_VISIBLE_DEVICES=0 python prefix_train.py \
-    --model_path "Qwen2.5-7B-Instruct" \
-    --data_path  "dataset/math10k/train.json" \
-    --output_dir "Results/Test/Qwen2.5/" \
+    --output_dir "Results/Test/Mistral-v0.2/" \
     --data_num 9000 \
     --n_prefix 32 \
     --op_position "attn_o" \
@@ -74,6 +64,10 @@ elif [ "$condition" == "eval" ]; then
 
     python Llama/eval.py \
     --data_path "Results/Test/base" \
+    --eval_num 500
+
+    python Llama/eval.py \
+    --data_path "Results/Lora" \
     --eval_num 500
 
     python Llama/eval.py \
@@ -91,56 +85,22 @@ elif [ "$condition" == "eval" ]; then
 
 elif [ "$condition" == "answer" ]; then
 
-    # python Llama/answer.py \
-    # --model_path "Meta-Llama-3-8B-Instruct" \
-    # --dataset "gsm8k" \
-    # --peft "RED" \
-    # --n_prefix 8 \
-    # --is_train_return False \
-    # --no_repeat_ngram_size 5 \
-    # --peft_path "Results/Test/Llama3/9000_math10k_all_32_2e-4/attn_o" \
-    # --repetition_penalty 1.1 \
-    # --data_num 500
-
+    python Llama/answer.py \
+    --model_path "Meta-Llama-3-8B-Instruct" \
+    --dataset "gsm8k" \
+    --peft "RED" \
+    --n_prefix 8 \
+    --is_train_return False \
+    --no_repeat_ngram_size 5 \
+    --peft_path "Results/Test/Llama3/9000_math10k_all_32_2e-4/attn_o" \
+    --repetition_penalty 1.1 \
+    --data_num 500
 
     python Llama/answer.py \
     --model_path "Qwen2.5-7B-Instruct" \
     --dataset "gsm8k" \
     --peft "RED" \
     --n_prefix 8 \
-    --is_train_return False \
-    --no_repeat_ngram_size 5 \
-    --peft_path "Results/Test/Qwen2.5/9000_math10k_all_32_2e-4/attn_o" \
-    --repetition_penalty 1.1 \
-    --data_num 500
-
-    python Llama/answer.py \
-    --model_path "Qwen2.5-7B-Instruct" \
-    --dataset "gsm8k" \
-    --peft "RED" \
-    --n_prefix 10 \
-    --is_train_return False \
-    --no_repeat_ngram_size 5 \
-    --peft_path "Results/Test/Qwen2.5/9000_math10k_all_32_2e-4/attn_o" \
-    --repetition_penalty 1.1 \
-    --data_num 500
-
-    python Llama/answer.py \
-    --model_path "Qwen2.5-7B-Instruct" \
-    --dataset "gsm8k" \
-    --peft "RED" \
-    --n_prefix 12 \
-    --is_train_return False \
-    --no_repeat_ngram_size 5 \
-    --peft_path "Results/Test/Qwen2.5/9000_math10k_all_32_2e-4/attn_o" \
-    --repetition_penalty 1.1 \
-    --data_num 500
-
-    python Llama/answer.py \
-    --model_path "Qwen2.5-7B-Instruct" \
-    --dataset "gsm8k" \
-    --peft "RED" \
-    --n_prefix 14 \
     --is_train_return False \
     --no_repeat_ngram_size 5 \
     --peft_path "Results/Test/Qwen2.5/9000_math10k_all_32_2e-4/attn_o" \
@@ -157,40 +117,6 @@ elif [ "$condition" == "answer" ]; then
     --peft_path "Results/Test/Qwen2.5-Math/9000_math10k_all_32_2e-4/attn_o" \
     --repetition_penalty 1.1 \
     --data_num 500
-
-    python Llama/answer.py \
-    --model_path "Qwen2.5-Math-7B-Instruct" \
-    --dataset "gsm8k" \
-    --peft "RED" \
-    --n_prefix 10 \
-    --is_train_return False \
-    --no_repeat_ngram_size 5 \
-    --peft_path "Results/Test/Qwen2.5-Math/9000_math10k_all_32_2e-4/attn_o" \
-    --repetition_penalty 1.1 \
-    --data_num 500
-
-    python Llama/answer.py \
-    --model_path "Qwen2.5-Math-7B-Instruct" \
-    --dataset "gsm8k" \
-    --peft "RED" \
-    --n_prefix 12 \
-    --is_train_return False \
-    --no_repeat_ngram_size 5 \
-    --peft_path "Results/Test/Qwen2.5-Math/9000_math10k_all_32_2e-4/attn_o" \
-    --repetition_penalty 1.1 \
-    --data_num 500
-
-    python Llama/answer.py \
-    --model_path "Qwen2.5-Math-7B-Instruct" \
-    --dataset "gsm8k" \
-    --peft "RED" \
-    --n_prefix 14 \
-    --is_train_return False \
-    --no_repeat_ngram_size 5 \
-    --peft_path "Results/Test/Qwen2.5-Math/9000_math10k_all_32_2e-4/attn_o" \
-    --repetition_penalty 1.1 \
-    --data_num 500
-
     
 elif [ "$condition" == "lora_train" ]; then
     
@@ -218,6 +144,26 @@ elif [ "$condition" == "lora_train" ]; then
     --data_num 9000 \
     --layer 15
 
+elif [ "$condition" == "lora_eval" ]; then
+    
+    # python lora/lora_eval.py \
+    # --model_path "Meta-Llama-3-8B-Instruct" \
+    # --lora_path "Results/Lora/Llama3/9000_math10k_lora_1e-3"\
+    # --dataset "gsm8k" \
+    # --data_num 500 
+
+    python lora/lora_eval.py \
+    --model_path "Qwen2.5-7B-Instruct" \
+    --lora_path "Results/Lora/Qwen2.5/9000_math10k_lora_1e-3"\
+    --dataset "gsm8k" \
+    --data_num 500 
+
+    python lora/lora_eval.py \
+    --model_path "Qwen2.5-Math-7B-Instruct" \
+    --lora_path "Results/Lora/Qwen2.5-Math/9000_math10k_lora_1e-3"\
+    --dataset "gsm8k" \
+    --data_num 500 
+
 elif [ "$condition" == "base_eval" ]; then
     
     # python Llama/base_eval.py \
@@ -227,9 +173,16 @@ elif [ "$condition" == "base_eval" ]; then
     # --data_num 500 \
     # --vllm False 
 
+    # python Llama/base_eval.py \
+    # --model_path "Qwen2.5-Math-7B-Instruct" \
+    # --output_path "Results/Test/Qwen2.5-Math_attn_o/9000_math10k_all_0_0/gsm8k_eval_base.json" \
+    # --dataset "gsm8k" \
+    # --data_num 500 \
+    # --vllm False 
+
     python Llama/base_eval.py \
-    --model_path "Qwen2.5-Math-7B-Instruct" \
-    --output_path "Results/Test/Qwen2.5-Math_attn_o/9000_math10k_all_0_0/gsm8k_eval_base.json" \
+    --model_path "Mistral-7B-Instruct-v0.2" \
+    --output_path "Results/Test/base/9000_mistral_all_0_0/gsm8k_eval_base.json" \
     --dataset "gsm8k" \
     --data_num 500 \
     --vllm False 

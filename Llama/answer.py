@@ -85,6 +85,8 @@ def main(
         template_index = "qwen_math"
     elif 'qwen' in model_path.lower():
         template_index = "qwen_base"
+    elif 'mistral' in model_path.lower():
+        template_index = "mistral"
 
     data_path = os.path.join(peft_path, f'{dataset}_eval_prefix{n_prefix}.json')
     
@@ -184,18 +186,8 @@ def main(
     all_prompts = [ex["prompt"] for ex in dataset]
     total_samples = len(all_prompts)
 
-    # prompt = "This is a test prompt."
-    # messages = [
-    #     {"role": "system", "content": "Please reason step by step, and put your final answer within \\boxed{}."},
-    #     {"role": "user", "content": prompt}
-    # ]
-    # text = tokenizer.apply_chat_template(
-    #     messages,
-    #     tokenize=False,
-    #     add_generation_prompt=True,
-    #     enable_thinking=True # Switch between thinking and non-thinking modes. Default is True.
-    # )
-    # pdb.set_trace()
+
+    
 
     for batch_idx in tqdm(range(0, total_samples, batch_size)):
         batch_prompts = all_prompts[batch_idx:batch_idx + batch_size]
