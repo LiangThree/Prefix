@@ -1,58 +1,52 @@
 #!/bin/bash
 
-# 确保git filter-repo已安装
-if ! command -v git-filter-repo &> /dev/null; then
-    echo "安装git-filter-repo..."
-    pip install git-filter-repo || {
-        echo "安装失败，请手动安装: pip install git-filter-repo"
-        exit 1
-    }
+# GitHub上传助手
+# 功能：跳过超过50MB的文件，防止上传失败
+# 使用：在项目目录运行，首次使用需配置GitHub仓库
+
+# 检查是否在Git仓库中
+git init
+
+# 查找超过50MB的文件（包含未跟踪文件）
+large_files=$(find . -type f -size +50M -not -path "./.git/*")
+
+if [ -n "$large_files" ]; then
+    echo "发现超过50MB的文件:"
+    echo "$large_files"
+    
+    # 添加规则到.gitignore
+    for file in $large_files; do
+        # 确保路径从项目根开始
+        rel_path=${file#./}
+        if ! grep -q "$rel_path" .gitignore 2>/dev/null; then
+            echo "添加规则: $rel_path"
+            echo "/$rel_path" >> .gitignore
+        fi
+    done
 fi
 
-# 初始化仓库
-if [ ! -d .git ]; then
-  git init
-fi
-
-# 生成.gitignore（忽略大于50MB的文件）
-find . -type f -size +50M | sed 's|^\./||' > .gitignore
-echo ".gitignore" >> .gitignore  # 防止.gitignore被忽略
-
-# 清除缓存并重新添加文件
-git rm -r --cached . >/dev/null 2>&1
-git add .gitignore
+# 添加所有跟踪文件
 git add .
 
-# 提交
-git commit -m "upload folder, skip files over 50MB" || {
-    echo "提交失败，可能没有文件变更"
-    exit 1
-}
-
-# 添加远程仓库
-git remote add origin git@github.com:LiangThree/Prefix.git 2>/dev/null
-
-# 尝试推送
-if git push -u origin master; then
-    echo "推送成功"
+# 配置提交信息
+if [ -z "$(git status --porcelain)" ]; then
+    echo "没有需要提交的内容"
     exit 0
-else
-    echo "检测到历史中存在大文件，开始清理..."
-    
-    # 获取所有大文件列表
-    find . -type f -size +50M | sed 's|^\./||' > /tmp/big_files.txt
-    
-    # 使用filter-repo清理历史
-    git filter-repo \
-        --paths-from-file /tmp/big_files.txt \
-        --invert-paths \
-        --force
-    
-    # 重新添加.gitignore
-    git add .gitignore
-    git add .
-    git commit -m "清除历史大文件后重新提交"
-    
-    # 强制推送
-    git push -u origin master --force
 fi
+
+echo -n "输入提交说明： "
+read commit_message
+git commit -m "$commit_message"
+
+# 配置远程仓库
+if [ -z "$(git remote)" ]; then
+    echo -n "输入GitHub仓库URL（https格式）： "
+    read repo_url
+    git remote add origin "$repo_url"
+fi
+
+# 推送代码（强制设置上游分支）
+current_branch=$(git branch --show-current)
+git push -u origin "$current_branch"
+
+echo "✔ 上传完成!已跳过超过50MB的文件"
