@@ -1,0 +1,14 @@
+{
+    "model_path": "/mnt/usercache/huggingface/Meta-Llama-3-8B-Instruct",
+    "data_path": "Results/RED/Llama3/9000_math10k_all_2e-4/layer/none_cal_4_eval_prefix-1.json",
+    "data_num": 500,
+    "op_position": "layer",
+    "peft": "RED",
+    "start": -1,
+    "end": -1,
+    "peft_path": "Results/RED/Llama3/9000_math10k_all_2e-4/layer/delta_vector.pth",
+    "is_train_return": false,
+    "no_repeat_ngram_size": 5,
+    "repetition_penalty": 1.1,
+    "template_index": "none"
+}

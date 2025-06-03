@@ -1,0 +1,7 @@
+{
+    "model_path": "/mnt/usercache/huggingface/Qwen3-8B",
+    "data_path": "dataset/math10k/train.json",
+    "data_num": 9000,
+    "op_position": "attn_o",
+    "template_index": "qwen_base"
+}
