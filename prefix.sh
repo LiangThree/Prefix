@@ -73,17 +73,17 @@ elif [ "$condition" == "prefix" ]; then
     --template_index 'qwen_base' \
     --num_train_epochs 3
 
-    # python Prefix/prefix_train.py \
-    # --model_path "Mistral-7B-Instruct-v0.3" \
-    # --data_path  "dataset/math10k/train.json" \
-    # --output_dir "Results/Test/Mistral-v0.3/" \
-    # --data_num 9000 \
-    # --n_prefix 32 \
-    # --op_position "ffn_up" \
-    # --learning_rate 2e-4 \
-    # --layer_type "all" \
-    # --template_index 'mistral' \
-    # --num_train_epochs 3
+    python Prefix/prefix_train.py \
+    --model_path "Mistral-7B-Instruct-v0.3" \
+    --data_path  "dataset/math10k/train.json" \
+    --output_dir "Results/Test/Mistral-v0.3/" \
+    --data_num 9000 \
+    --n_prefix 32 \
+    --op_position "ffn_up" \
+    --learning_rate 2e-4 \
+    --layer_type "all" \
+    --template_index 'mistral' \
+    --num_train_epochs 3
 
 
 elif [ "$condition" == "eval" ]; then
