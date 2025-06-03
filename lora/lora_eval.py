@@ -9,7 +9,7 @@ import sys
 cur_path = os.path.dirname(os.path.abspath(__file__))
 main_dir = "/".join(cur_path.split("/")[:-1])
 sys.path.append(main_dir)
-from Llama.make_answer_json import make_answer
+from Prefix.make_answer_json import make_answer
 import json
 import pdb
 from datasets import load_dataset, Dataset
@@ -81,20 +81,7 @@ def save_list_to_json(data_list, file_path):
         json.dump(data_list, f, ensure_ascii=False, indent=4)  # 使用 indent 格式化 JSON
     print(f"数据已成功存储到 {file_path}")
 
-def train_model(model_path:str, lora_path:str, data_num:int, dataset:str):
-
-    if 'llama' in model_path.lower():
-        template_index = "llama3"
-    elif 'qwen' in model_path.lower() and 'math' in model_path.lower():
-        template_index = "qwen_math"
-    elif 'qwen' in model_path.lower():
-        template_index = "qwen_base"
-
-    print("template_index:", template_index)
-    print("----------------------- template -----------------------")
-    print(prompt_template[template_index])
-    print("--------------------------------------------------------")
-    template = prompt_template[template_index]
+def train_model(model_path:str, lora_path:str, data_num:int, dataset:str, template_index:str):
 
     path = "/mnt/usercache/huggingface/"
     if not os.path.exists(path):
@@ -105,7 +92,7 @@ def train_model(model_path:str, lora_path:str, data_num:int, dataset:str):
     if not os.path.exists(path):
         path = "/mnt/userdata/liangsirui/MyProject/"
     
-    data_path = os.path.join(lora_path, f'{dataset}_eval.json')
+    data_path = os.path.join(lora_path, f'{template_index}_{dataset}_eval.json')
     lora_path = os.path.join(lora_path)
 
     if not os.path.isfile(data_path):
@@ -120,13 +107,15 @@ def train_model(model_path:str, lora_path:str, data_num:int, dataset:str):
         padding_side="left", use_fast=False)
     tokenizer.pad_token = tokenizer.eos_token
 
+    template = get_prompt(tokenizer, template_index)
+
     model = PeftModel.from_pretrained(model, lora_path)
     model.to(device)
     model.eval()
 
     def process_alpacaeval(example):
         question = example['Question']
-        prompt = template % question
+        prompt = template.replace("%s", question)
         example["prompt"] = prompt
         return example
 
@@ -135,7 +124,7 @@ def train_model(model_path:str, lora_path:str, data_num:int, dataset:str):
 
     answer_dict = read_json_file(data_path)
 
-    batch_size = 64
+    batch_size = 32
     all_prompts = [ex["prompt"] for ex in dataset]
     total_samples = len(all_prompts)
 
@@ -147,7 +136,7 @@ def train_model(model_path:str, lora_path:str, data_num:int, dataset:str):
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=512,
+            max_length=2048,
         ).to("cuda")
         
         outputs = model.generate(
@@ -167,32 +156,6 @@ def train_model(model_path:str, lora_path:str, data_num:int, dataset:str):
             global_idx = batch_idx + i
             answer_dict[str(global_idx)]['lora'] = completion
 
-    # for i in tqdm(range(len(dataset))):
-        
-    #     generate_dict = {}
-    #     prompt = dataset[i]["prompt"]
-    #     prompt_ids = tokenizer(prompt, return_tensors='pt').to(model.base_model.device)
-        
-    #     outputs = model.generate(
-    #         **prompt_ids,
-    #         max_new_tokens=512,
-    #         do_sample=False,  
-    #         num_beams=1,      
-    #         use_cache=True,    
-    #     )
-
-    #     completion_good = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    #     print("------------------------ Question ----------------------------")
-    #     print('Question:', dataset[i]['Question'])
-    #     print('Output:', dataset[i]['Output'])
-    #     print('Answer:', dataset[i]['Answer'])
-
-    #     print("------------------------ Answer ----------------------------")
-    #     print(completion_good)
-    #     answer_dict[str(i)]['lora'] = completion_good
-
-    #     print("------------------------ END ----------------------------\n\n")
-    
     save_list_to_json(answer_dict, data_path)
 
 

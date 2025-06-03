@@ -72,7 +72,7 @@ class ActivationLayer(nn.Module):
         if self.prefix==0:
             pass
         
-        elif x.shape[1] > 1: # NOTE 对于promt的前向传递
+        elif x.shape[1] > 1  or self.prefix==-1: # NOTE 对于promt的前向传递
             
             self.modify_count = 0
             
@@ -93,7 +93,7 @@ class ActivationLayer(nn.Module):
                 hidden_states = self.delta_vector["activation_ln"](hidden_states)
 
         elif x.shape[1] == 1:
-            if self.modify_count < self.prefix or self.prefix==-1: # NOTE 对于前缀进行调整，超出前缀范围不再调整
+            if self.modify_count < self.prefix: # NOTE 对于前缀进行调整，超出前缀范围不再调整
             
                 self.modify_count += 1
 

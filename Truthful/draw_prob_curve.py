@@ -51,14 +51,6 @@ def get_prob_layers(output_path):
     print(f'reft acc: {reft_accuracies}')
     print(f'reft top k: {reft_top_k_layer}')
 
-    avg_acc = [round((x+y+z)/3,3) for x, y, z in zip(base_accuracies, prefix_accuracies, reft_accuracies)]
-    avg_top_k_layer =  [i for i, _ in heapq.nlargest(10, enumerate(avg_acc), key=lambda x: x[1])]
-    print(f'sum acc: {avg_acc}')
-    print(f'sum top k: {avg_top_k_layer}')
-
-    prob_layers = avg_top_k_layer[:5]
-    return prob_layers
-
 
 def draw_curve(output_path="Truthful/prob_results/llama3"):
     # 分析get_inference_hs.py的分析结果
@@ -67,7 +59,7 @@ def draw_curve(output_path="Truthful/prob_results/llama3"):
     prefix_prob =  read_json_file(f"{output_path}/truthful_probe_prefix.json")
 
     data_length = len(base_prob.keys())
-    layer_index_list = get_prob_layers(output_path)
+    get_prob_layers(output_path)
 
     if "qwen" in output_path.lower():
         layer_num = 28
@@ -77,7 +69,10 @@ def draw_curve(output_path="Truthful/prob_results/llama3"):
     plt.figure(figsize=(6 * 4, 4 * 8))  # Adjust size as needed
     plt.subplots_adjust(hspace=0.4, wspace=0.3)  # Adjust spacing between subplots
 
-    # for layer_index in layer_index_list:
+    all_base_layer_acc = [0 for i in range(512)]
+    all_reft_layer_acc = [0 for i in range(512)]
+    all_prefix_layer_acc = [0 for i in range(512)]
+
     for layer_index in range(layer_num):
         int_layer_index = int(layer_index)
         layer_index = f"layer_{layer_index}"
@@ -116,6 +111,10 @@ def draw_curve(output_path="Truthful/prob_results/llama3"):
         avg_reft = [acc/data_length for acc in all_reft_acc][:data_length]
         avg_prefix = [acc/data_length for acc in all_prefix_acc][:data_length]
 
+        all_base_layer_acc = [x+y for x,y in zip(all_base_layer_acc[:data_length],avg_base[:data_length])]
+        all_reft_layer_acc = [x+y for x,y in zip(all_reft_layer_acc[:data_length],avg_reft[:data_length])]
+        all_prefix_layer_acc = [x+y for x,y in zip(all_prefix_layer_acc[:data_length],avg_prefix[:data_length])]
+
         # Create subplot
         ax = plt.subplot(8, 4, int_layer_index + 1)
         
@@ -151,7 +150,38 @@ def draw_curve(output_path="Truthful/prob_results/llama3"):
         os.mkdir(f"{output_path}/prob_curve")
 
     plt.savefig(f"{output_path}/prob_curve/all_layers_comparison.svg", bbox_inches='tight', dpi=300)
-    plt.show()
+
+    plt.figure(figsize=(6, 4))  # Adjust size as needed
+    ax = plt.gca()  # 明确获取当前axes
+
+    all_base_layer_acc = [i/32 for i in all_base_layer_acc]
+    all_reft_layer_acc = [i/32 for i in all_reft_layer_acc]
+    all_prefix_layer_acc = [i/32 for i in all_prefix_layer_acc]
+
+    ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.7, color='lightgray')
+    ax.spines['left'].set_visible(True)
+    ax.spines['bottom'].set_visible(True)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    
+    # Plot lines
+    colors = ['#EF4F4F', '#7E5CAD', '#7AA2E3', '#52D3D8', '#FFE699']
+    ax.plot(all_base_layer_acc, label='Base Model', linestyle='-', linewidth=1, color=colors[0])
+    ax.plot(all_reft_layer_acc, label='ReFT Model', linestyle='--', linewidth=1, color=colors[1])
+    ax.plot(all_prefix_layer_acc, label='Prefix Model', linestyle=':', linewidth=1, color=colors[2])
+
+    ax.legend(fontsize=8)
+
+    # Subplot title and labels
+    ax.set_title(f'Token-wise Accuracy', fontsize=8)
+    ax.set_xlabel('Token Position', fontsize=8)
+    ax.set_ylabel('Average Accuracy', fontsize=8)
+
+    ax.grid(True, alpha=0.4)
+    ax.set_xlim(0, data_length)
+    ax.set_xticks(range(0, data_length, data_length//8))
+
+    plt.savefig(f"{output_path}/prob_curve/avg_comparison.svg", bbox_inches='tight', dpi=300)
         
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ import pdb
 from datasets import load_dataset, Dataset
 from typing import Optional, Union
 from transformers.trainer_callback import TrainerCallback
-
+import fire
 import os
 
 import sys
@@ -35,26 +35,12 @@ def get_data(data_files:str, data_num:int, split:Optional[Union[str, float]] = N
     
     return dataset['train'], dataset['test']
 
-def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_num:int, learning_rate: float = 2e-5,):
-
-    if 'llama' in model_path.lower():
-        template_index = "llama3"
-    elif 'qwen' in model_path.lower() and 'math' in model_path.lower():
-        template_index = "qwen_math"
-    elif 'qwen' in model_path.lower():
-        template_index = "qwen_base"
+def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_num:int, template_index:str, learning_rate: float = 2e-5):
 
     path = "/mnt/usercache/huggingface/"
     if not os.path.exists(path):
         path = "/mnt/publiccache/huggingface/"
     model_path = path + model_path
-
-    print("template_index:", template_index)
-
-    print("----------------------- template -----------------------")
-    print(prompt_template[template_index])
-    print("--------------------------------------------------------")
-    prompt = prompt_template[template_index]
 
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_path, device_map="auto", trust_remote_code=True).to(device)
@@ -64,6 +50,8 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
         model_path, model_max_length=2048,
         padding_side="right", use_fast=False)
     tokenizer.pad_token = tokenizer.eos_token
+
+    template = get_prompt(tokenizer, template_index)
 
     peft_config = LoraConfig(
         r=4, lora_alpha=32, target_modules=["o_proj"], layers_to_transform=[layer],
@@ -76,12 +64,12 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
 
     # 将数据转换为 Hugging Face 的 Dataset 格式
     train_dataset = Dataset.from_dict({
-        "input": [prompt % example['instruction'] for example in train_data],
+        "input": [template % example['instruction'] for example in train_data],
         "output": [example['output'] for example in train_data]
     })
 
     valid_dataset = Dataset.from_dict({
-        "input": [prompt % example['instruction'] for example in eval_data],
+        "input": [template % example['instruction'] for example in eval_data],
         "output": [example['output'] for example in eval_data]
     })
 
@@ -110,14 +98,13 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
     training_args = TrainingArguments(
         output_dir="./lora/lora_output",
         overwrite_output_dir=True, 
-        fp16=True,
-        per_device_train_batch_size=4,
-        per_device_eval_batch_size=4,
+        bf16=True,
+        per_device_train_batch_size=2,
+        per_device_eval_batch_size=2,
         learning_rate=learning_rate,
-        num_train_epochs=3,
+        num_train_epochs=2,
         logging_strategy="steps",
         logging_steps=10,
-        evaluation_strategy="epoch",
         save_strategy="epoch",
         report_to="none"
     )
@@ -137,19 +124,6 @@ def train_model(model_path:str, data_path:str, layer:int, output_dir:str, data_n
     tokenizer.save_pretrained(output_dir)
     print(f'model saved in {output_dir}')
 
-def main():
-    parser = argparse.ArgumentParser(description="A simple script that takes different arguments.")
-    parser.add_argument('-model_path', '--model_path', type=str, default=None)
-    parser.add_argument('-data_path', '--data_path', type=str, default=None)
-    parser.add_argument('-output_dir', '--output_dir', type=str)
-    parser.add_argument('-data_num', '--data_num', type=int)
-    parser.add_argument('-layer', '--layer', type=int, default=None)
-    parser.add_argument('-learning_rate', '--learning_rate', type=float, default=None)
-    args = parser.parse_args()
-
-    train_model(**vars(args))
-    # model.base_model.model.model.layers[15].self_attn.o_proj.lora_A.default.weight
-
 
 if __name__ == '__main__':
-    main()
+    fire.Fire(train_model)

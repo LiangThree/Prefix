@@ -23,6 +23,13 @@ def save_list_to_json(data_list, file_path):
         json.dump(data_list, f, ensure_ascii=False, indent=4)  # 使用 indent 格式化 JSON
     print(f"数据已成功存储到 {file_path}")
 
+
+def read_jsonl(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = [json.loads(line) for line in f]
+    return data
+
+
 def eval_one_data(
     model_answer: str,
     answer: str,
@@ -43,17 +50,17 @@ def eval_one_data(
         return False
 
 if __name__ == "__main__":
-    data_path = "dataset/math10k/train.json"
-    data = read_json_file(data_path)
+    data_path = "dataset/aime24/test.jsonl"
+    data = read_jsonl(data_path)
     
-    count = 0
-    
+    data_list = []
     for one_data in data:
-        if eval_one_data(one_data['output'], one_data['answer']):
-            pass
-        else:
-            count += 1
-            print(one_data)
+        current_data={
+            "instruction": one_data["question"],
+            "output": one_data["solution"],
+            "answer": one_data["answer"],
+        }
+        data_list.append(current_data)
     
-    print(count) 
-
+    save_list_to_json(data_list, "dataset/aime24/test.json")
+    

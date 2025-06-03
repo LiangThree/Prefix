@@ -1,6 +1,6 @@
 {
     "model_path": "/mnt/usercache/huggingface/Meta-Llama-3-8B-Instruct",
-    "data_path": "Results/Test/Llama3/9000_math10k_all_32_2e-4/ffn_up/gsm8k_eval_prefix14.json",
+    "data_path": "Results/Test/Llama3/9000_math10k_all_32_2e-4/ffn_up/llama3_gsm8k_eval_prefix9.json",
     "data_num": 500,
     "op_position": "ffn_up",
     "peft": "RED",

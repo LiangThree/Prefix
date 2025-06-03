@@ -1,5 +1,5 @@
 ---
-base_model: /mnt/usercache/huggingface/Qwen2.5-Math-7B-Instruct
+base_model: /mnt/usercache/huggingface/Qwen2.5-7B-Instruct
 library_name: peft
 ---
 

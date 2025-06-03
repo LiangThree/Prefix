@@ -1,0 +1,14 @@
+{
+    "model_path": "/mnt/usercache/huggingface/DeepSeek-R1-Distill-Qwen-7B",
+    "data_path": "Results/Test/DeepSeek-Qwen/9000_math10k_all_32_2e-3/attn_o/fewshot_chat_template_gsm8k_eval_prefix10.json",
+    "data_num": 500,
+    "op_position": "attn_o",
+    "peft": "RED",
+    "start": -1,
+    "end": -1,
+    "peft_path": "Results/Test/DeepSeek-Qwen/9000_math10k_all_32_2e-3/attn_o/delta_vector.pth",
+    "is_train_return": false,
+    "no_repeat_ngram_size": 5,
+    "repetition_penalty": 1.1,
+    "template_index": "fewshot_chat_template"
+}
