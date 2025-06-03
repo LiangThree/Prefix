@@ -1,7 +1,0 @@
-{
-    "model_path": "/mnt/usercache/huggingface/Mistral-7B-Instruct-v0.3",
-    "data_path": "dataset/math10k/train.json",
-    "data_num": 9000,
-    "op_position": "ffn_up",
-    "template_index": "mistral"
-}

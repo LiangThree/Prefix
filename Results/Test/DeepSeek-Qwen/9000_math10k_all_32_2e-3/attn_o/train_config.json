@@ -1,7 +1,0 @@
-{
-    "model_path": "/mnt/usercache/huggingface/DeepSeek-R1-Distill-Qwen-7B",
-    "data_path": "dataset/math10k/train.json",
-    "data_num": 9000,
-    "op_position": "attn_o",
-    "template_index": "chat_template"
-}
