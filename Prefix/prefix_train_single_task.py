@@ -300,29 +300,16 @@ def train(
         num_proc=8
     )
 
-    # 处理完整输出数据集 
-    train_full = train_full.map(
-        lambda ex: process_ultra_preference(ex, "full"),
-        num_proc=8
-    )
-
     # 合并数据集
-    combined_data = concatenate_datasets([train_prefix, train_full])
+    combined_data = train_prefix
     combined_data = combined_data.filter(lambda x:x["prompt_length"] <= MAX_INPUT_LENGTH and x["text_length"] <= MAX_LENGTH)
     combined_data = combined_data.remove_columns(
         ["instruction", "output", "prompt", "text", "text_length", "prompt_length", "input"]
     )
 
-    # 计算样本权重
-    n_prefix = len(train_prefix)
-    n_full = len(train_full)
 
     def add_weight(example):
-        if example["task_type"] == "prefix":
-            example["weight"] = 1.0 / n_prefix
-        else:
-            example["weight"] = 1.0 / n_full
-        return example
+        example["weight"] = 1.0 / 1000
 
     combined_data = combined_data.map(add_weight)
     custom_saving_callback = CustomModelSavingCallback()
