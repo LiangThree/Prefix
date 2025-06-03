@@ -1,46 +1,46 @@
 #!/bin/bash
 
-# GitHub上传助手
-# 功能：跳过超过50MB的文件，防止上传失败
-# 使用：在项目目录运行，首次使用需配置GitHub仓库
+condition=$1
 
-# 检查是否在Git仓库中
-git init
+if [ "$condition" == "upload" ]; then
+  if [ ! -d .git ]; then
+    git init
+  fi
 
-# 查找超过50MB的文件（包含未跟踪文件）
-large_files=$(find . -type f -size +50M -not -path "./.git/*")
+  find . -type f -size +50M | sed 's|^\./||' > .gitignore
+  echo ".gitignore" >> .gitignore  
 
-if [ -n "$large_files" ]; then
-    echo "发现超过50MB的文件:"
-    echo "$large_files"
-    
-    # 添加规则到.gitignore
-    for file in $large_files; do
-        # 确保路径从项目根开始
-        rel_path=${file#./}
-        if ! grep -q "$rel_path" .gitignore 2>/dev/null; then
-            echo "添加规则: $rel_path"
-            echo "/$rel_path" >> .gitignore
-        fi
-    done
+  git add .
+  git commit -m "upload folder, skip files over 50MB"
+  git remote add origin git@github.com:LiangThree/Prefix.git
+  git push -u origin master
+
+elif [ "$condition" == "update" ]; then
+
+  # 初始化仓库（仅在未初始化时执行）
+  if [ ! -d .git ]; then
+    git init
+  fi
+
+  # 智能更新.gitignore（只追加新发现的大文件）
+  find . -type f -size +50M | sed 's|^\./||' | while read -r file; do
+    if ! grep -qxF "$file" .gitignore 2>/dev/null; then
+      echo "$file" >> .gitignore
+      echo "Added to .gitignore: $file"
+    fi
+  done
+
+  # 添加所有未忽略文件（包括.gitignore本身）
+  git add .
+
+  # 提交更新
+  git commit -m "Update repository [$(date +%Y-%m-%d)]"
+
+  # 确保远程仓库配置正确
+  git remote rm origin 
+  git remote add origin git@github.com:LiangThree/MyProject.git
+
+  # 推送更新到主分支
+  git push -u origin master
+
 fi
-
-# 添加所有跟踪文件
-git add .
-
-# 配置提交信息
-if [ -z "$(git status --porcelain)" ]; then
-    echo "没有需要提交的内容"
-    exit 0
-fi
-
-git commit -m "update"
-
-# 配置远程仓库
-if [ -z "$(git remote)" ]; then
-    git remote add origin "https://github.com/LiangThree/Prefix.git"
-fi
-
-# 推送代码（强制设置上游分支）
-current_branch=$(git branch --show-current)
-git push -u origin "$current_branch"
