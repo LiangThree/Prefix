@@ -34,19 +34,13 @@ if [ -z "$(git status --porcelain)" ]; then
     exit 0
 fi
 
-echo -n "输入提交说明： "
-read commit_message
-git commit -m "$commit_message"
+git commit -m "update"
 
 # 配置远程仓库
 if [ -z "$(git remote)" ]; then
-    echo -n "输入GitHub仓库URL（https格式）： "
-    read repo_url
-    git remote add origin "$repo_url"
+    git remote add origin "https://github.com/LiangThree/Prefix.git"
 fi
 
 # 推送代码（强制设置上游分支）
 current_branch=$(git branch --show-current)
 git push -u origin "$current_branch"
-
-echo "✔ 上传完成!已跳过超过50MB的文件"
