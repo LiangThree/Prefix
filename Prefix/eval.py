@@ -180,7 +180,8 @@ if __name__ == "__main__":
     eval_list = []
     for file in json_files:
         # if 'gsm8k' in file or "mawps" in file or "svamp" in file:
-        if "qwen" in file.lower() and  'gsm8k' in file:
+        if "llama" in file.lower() and  'gsm8k' in file:
+            # print(file)
             train_config = parse_training_config(file)
             try:
                 eval_data(file, train_config, args.eval_num)

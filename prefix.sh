@@ -61,29 +61,43 @@ elif [ "$condition" == "prefix" ]; then
     # --num_train_epochs 3 \
     # --template_index "llama3"
 
+    # python Prefix/prefix_train.py \
+    # --model_path "Qwen2.5-7B-Instruct" \
+    # --data_path  "dataset/math10k/train.json" \
+    # --output_dir "Results/Test/Qwen2.5/" \
+    # --data_num 5000 \
+    # --n_prefix 64 \
+    # --op_position "ffn_up" \
+    # --learning_rate 2e-4 \
+    # --layer_type "all" \
+    # --template_index 'qwen_base' \
+    # --num_train_epochs 2 \
+    # --weight 1 \
+
     python Prefix/prefix_train.py \
-    --model_path "Qwen2.5-7B-Instruct" \
+    --model_path "Meta-Llama-3-8B-Instruct" \
     --data_path  "dataset/math10k/train.json" \
-    --output_dir "Results/Test/Qwen2.5/" \
-    --data_num 9000 \
+    --output_dir "Results/Test/Llama3/" \
+    --data_num 5000 \
     --n_prefix 64 \
     --op_position "ffn_up" \
     --learning_rate 2e-4 \
     --layer_type "all" \
-    --template_index 'qwen_base' \
-    --num_train_epochs 3
+    --num_train_epochs 2 \
+    --template_index "llama3" \
+    --weight 1 \
 
-    python Prefix/prefix_train.py \
-    --model_path "Mistral-7B-Instruct-v0.3" \
-    --data_path  "dataset/math10k/train.json" \
-    --output_dir "Results/Test/Mistral-v0.3/" \
-    --data_num 9000 \
-    --n_prefix 32 \
-    --op_position "ffn_up" \
-    --learning_rate 2e-4 \
-    --layer_type "all" \
-    --template_index 'mistral' \
-    --num_train_epochs 3
+    # python Prefix/prefix_train.py \
+    # --model_path "Mistral-7B-Instruct-v0.3" \
+    # --data_path  "dataset/math10k/train.json" \
+    # --output_dir "Results/Test/Mistral-v0.3/" \
+    # --data_num 9000 \
+    # --n_prefix 32 \
+    # --op_position "ffn_up" \
+    # --learning_rate 2e-4 \
+    # --layer_type "all" \
+    # --template_index 'mistral' \
+    # --num_train_epochs 3
 
 
 elif [ "$condition" == "eval" ]; then
@@ -101,34 +115,35 @@ elif [ "$condition" == "eval" ]; then
     --eval_num 500
 
     python Prefix/eval.py \
-    --data_path "Results/Test" \
+    --data_path "Results/Test/Llama3" \
     --eval_num 500
 
 elif [ "$condition" == "answer" ]; then
 
-    python Prefix/answer.py \
-    --model_path "Meta-Llama-3-8B-Instruct" \
-    --dataset "gsm8k" \
-    --peft "RED" \
-    --n_prefix 8 \
-    --is_train_return False \
-    --no_repeat_ngram_size 5 \
-    --peft_path "Results/Test/Llama3/9000_math10k_all_64_2e-4/ffn_up" \
-    --repetition_penalty 1.1 \
-    --template_index "llama3" \
-    --data_num 500
-
     # python Prefix/answer.py \
-    # --model_path "Qwen2.5-7B-Instruct" \
+    # --model_path "Meta-Llama-3-8B-Instruct" \
     # --dataset "gsm8k" \
     # --peft "RED" \
-    # --n_prefix 10 \
+    # --n_prefix 8 \
     # --is_train_return False \
     # --no_repeat_ngram_size 5 \
-    # --peft_path "Results/Test/Qwen2.5/9000_math10k_all_64_2e-4/ffn_up" \
+    # --peft_path "Results/Test/Llama3/5000_math10k_all_64_2e-4_1/ffn_up" \
     # --repetition_penalty 1.1 \
-    # --template_index "qwen_base" \
+    # --template_index "llama3" \
     # --data_num 500
+
+
+    python Prefix/answer.py \
+    --model_path "Qwen2.5-7B-Instruct" \
+    --dataset "gsm8k" \
+    --peft "RED" \
+    --n_prefix 10 \
+    --is_train_return False \
+    --no_repeat_ngram_size 5 \
+    --peft_path "Results/Test/Qwen2.5/5000_math10k_all_64_2e-4_1/ffn_up" \
+    --repetition_penalty 1.1 \
+    --template_index "qwen_base" \
+    --data_num 500
 
 
 elif [ "$condition" == "lora_train" ]; then

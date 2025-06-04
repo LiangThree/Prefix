@@ -185,14 +185,12 @@ def train(
         data_num: int = None,
         n_prefix: int = None,
         op_position: str = "",
-        learning_rate: str = 2e-5,
+        learning_rate: str = None,
         num_train_epochs:  int = 3,
         layer_type: str="",
         template_index: str="",
+        weight: str = None,
 ):
-    
-    str_lr = str(learning_rate)
-    learning_rate = float(learning_rate)
 
     path = "/mnt/usercache/huggingface/"
     model_path = path + model_path
@@ -205,7 +203,10 @@ def train(
     elif 'prm800k' in data_path:
         data_type = 'prm800k'
 
-    output_dir = os.path.join(output_dir, f'{data_num}_{data_type}_{layer_type}_{n_prefix}_{str_lr}')
+    output_dir = os.path.join(output_dir, f'{data_num}_{data_type}_{layer_type}_{n_prefix}_{learning_rate}_{weight}')
+
+    weight = float(weight)
+    learning_rate = float(learning_rate)
 
     model = load_RED_model(model_path=model_path, op_position=op_position, layer_type=layer_type, n_prefix=n_prefix)
     
@@ -323,9 +324,9 @@ def train(
 
     def add_weight(example):
         if example["task_type"] == "prefix":
-            example["weight"] = 1.0  
+            example["weight"] = weight
         else:
-            example["weight"] = 1.0 
+            example["weight"] = weight
         return example
 
     combined_data = combined_data.map(add_weight)
